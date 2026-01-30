@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: excel_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: excel_user
+      POSTGRES_PASSWORD: excel_password
+      POSTGRES_DB: excel_editor
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # --- NEW SERVICE ADDED BELOW ---
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres   # note the indentation fix
+      ADMINER_DESIGN: pepa-linha        # also properly indented
+
+volumes:
+  postgres_data:

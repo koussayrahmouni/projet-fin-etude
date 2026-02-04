@@ -1,0 +1,16 @@
+# Non-sensitive defaults. Move secrets to ansible/vault/secret.yml (see README-ANSIBLE-JIRA.md).
+jira_url: "http://localhost:8081"   # change to your Jira URL
+jira_user: "mock"          # kept here for clarity, but put real secret in vault
+jira_api_token: "mock"        # placeholder (use ansible-vault)
+service_desk_project_key: "SD"              # change to your SD project key
+default_transition_names:
+  - Done
+  - Closed
+  - "Clôturé"
+  - Resolved
+
+
+
+
+
+

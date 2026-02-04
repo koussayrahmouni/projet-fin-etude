@@ -1,0 +1,55 @@
+---
+- name: Ensure verification script is present and executable
+  file:
+    path: "{{ playbook_dir }}/../scripts/verify_jira.py"
+    mode: '0755'
+    state: file
+
+- name: Run Jira verification script
+  command: >-
+    {{ playbook_dir }}/../scripts/verify_jira.py --client "{{ client_name }}"
+  environment:
+    JIRA_URL: "{{ jira_url }}"
+    JIRA_USER: "{{ jira_user | default('') }}"
+    JIRA_API_TOKEN: "{{ jira_api_token | default('') }}"
+    SERVICE_DESK_PROJECT_KEY: "{{ service_desk_project_key | default('SD') }}"
+    DEFAULT_TRANSITIONS: "{{ default_transition_names | join(',') }}"
+  register: verify_run
+  changed_when: false
+  failed_when: false   # ← important: we want to parse even failed runs
+
+- name: Parse verification JSON output
+  set_fact:
+    verify_result: "{{ verify_run.stdout | from_json }}"
+  when: verify_run.stdout | length > 0
+
+- name: Fail if critical verification steps failed
+  fail:
+    msg: |
+      Verification failed for client {{ client_name }}
+
+      Project found ..........: {{ verify_result.checks | selectattr('name','equalto','find_project') | map(attribute='ok') | first | default('missing') }}
+      Component created ......: {{ verify_result.checks | selectattr('name','equalto','component_creation') | map(attribute='ok') | first | default('missing') }}
+      RUN project found ......: {{ verify_result.checks | selectattr('name','equalto','run_project') | map(attribute='ok') | first | default('missing') }}
+      Build issues closed ....: {{ verify_result.checks | selectattr('name','equalto','close_build_issues') | map(attribute='results') | flatten | map(attribute='result.ok') | list | unique | join(', ') }}
+      Service desk informed ..: {{ verify_result.checks | selectattr('name','equalto','inform_service_desk') | map(attribute='created') | first | default('missing') }}
+  when: >
+    verify_result is defined and
+    (
+      (verify_result.checks | selectattr('name','equalto','find_project') | map(attribute='ok') | first | default(false)) != true
+      or
+      (verify_result.checks | selectattr('name','equalto','component_creation') | map(attribute='created') | first | default(false)) != true
+      or
+      (verify_result.checks | selectattr('name','equalto','run_project') | map(attribute='ok') | first | default(false)) != true
+      or
+      (verify_result.checks | selectattr('name','equalto','inform_service_desk') | map(attribute='created') | first | default(false)) != true
+    )
+
+- #name: Show full verification result (even on success)
+  #debug:
+    #var: verify_result
+
+
+
+
+

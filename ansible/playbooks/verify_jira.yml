@@ -1,0 +1,16 @@
+---
+- name: Verify Jira client setup and close Build tickets
+  hosts: local
+  gather_facts: false
+  vars:
+    client_name: "{{ client_name | default('') }}"
+  vars_files:
+    - ../group_vars/all.yml
+  roles:
+    - role: verify_jira
+
+
+
+
+
+

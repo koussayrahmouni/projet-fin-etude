@@ -58,8 +58,8 @@ export const sessions = pgTable("sessions", {
     .$onUpdate(() => new Date()),
 
   // Add these to satisfy Better Auth validation
-  ipAddress: varchar("ip_address", { length: 45 }).default(null),     // IPv4/IPv6
-  userAgent: text("user_agent").default(null),
+  ipAddress: varchar("ip_address", { length: 45 }),     // IPv4/IPv6
+  userAgent: text("user_agent"),
 });
 
 
@@ -92,7 +92,7 @@ export const accounts = pgTable(
     // Your existing OAuth fields
     access_token: text("access_token"),
     refresh_token: text("refresh_token"),
-    expires_at: bigint("expires_at", { mode: "number" }).default(null),
+    expires_at: bigint("expires_at", { mode: "number" }),
     token_type: varchar("token_type", { length: 50 }),
     scope: text("scope"),
     id_token: text("id_token"),
@@ -119,11 +119,29 @@ export const excelSessions = pgTable(
   })
 );
 
+// Checklist sessions table
+export const checklistSessions = pgTable(
+  "checklist_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    clientName: text("client_name").notNull(),
+    clientInfo: jsonb("client_info"),
+    data: jsonb("data").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    userIdIdx: index("checklist_sessions_user_id_idx").on(table.userId),
+  })
+);
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   accounts: many(accounts),
   excelSessions: many(excelSessions),
+  checklistSessions: many(checklistSessions),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -136,4 +154,8 @@ export const accountsRelations = relations(accounts, ({ one }) => ({
 
 export const excelSessionsRelations = relations(excelSessions, ({ one }) => ({
   user: one(users, { fields: [excelSessions.userId], references: [users.id] }),
+}));
+
+export const checklistSessionsRelations = relations(checklistSessions, ({ one }) => ({
+  user: one(users, { fields: [checklistSessions.userId], references: [users.id] }),
 }));

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { v4 as uuid } from "uuid";
 
@@ -47,10 +47,9 @@ export default function ExcelPage() {
   const sessionIdRef = useRef<string | null>(null);
 
   const viewModeButtonClass = (mode: string) =>
-    `px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-      viewMode === mode
-        ? "bg-blue-600 text-white"
-        : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+    `px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === mode
+      ? "bg-blue-600 text-white"
+      : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
     }`;
 
   // ─── Session & Autosave ────────────────────────────────────────────────
@@ -219,7 +218,7 @@ export default function ExcelPage() {
 
               let description = "";
               if (descCandidates.length > 0) {
-                description = descCandidates.reduce((max, curr) => 
+                description = descCandidates.reduce((max, curr) =>
                   curr.length > max.length ? curr : max, descCandidates[0]
                 );
               }
@@ -283,7 +282,7 @@ export default function ExcelPage() {
                   .filter(Boolean);
 
                 if (descCandidates.length > 0) {
-                  const newDesc = descCandidates.reduce((max, curr) => 
+                  const newDesc = descCandidates.reduce((max, curr) =>
                     curr.length > max.length ? curr : max, descCandidates[0]
                   );
                   if (newDesc.length > (currentItem.description || "").length) {
@@ -321,11 +320,11 @@ export default function ExcelPage() {
     return editedGroups
       .map(group => ({
         ...group,
-        items: group.items.filter((item: any) => 
+        items: group.items.filter((item: any) =>
           item.name.toLowerCase().includes(lower) ||
           (item.description && item.description.toLowerCase().includes(lower)) ||
-          item.teamData.some((t: any) => 
-            t.status.toLowerCase().includes(lower) || 
+          item.teamData.some((t: any) =>
+            t.status.toLowerCase().includes(lower) ||
             (t.comment && t.comment.toLowerCase().includes(lower))
           )
         ),
@@ -542,8 +541,8 @@ export default function ExcelPage() {
                   {loading
                     ? `Parsing ${fileName}...`
                     : fileName
-                    ? `Editing: ${fileName}`
-                    : "Upload an Excel file to start"}
+                      ? `Editing: ${fileName}`
+                      : "Upload an Excel file to start"}
                 </p>
               </div>
               <div className="flex flex-wrap gap-3 items-center">
@@ -561,9 +560,8 @@ export default function ExcelPage() {
                   />
                   <label
                     htmlFor="file-upload-header"
-                    className={`px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer text-sm font-medium transition-colors inline-block ${
-                      loading ? "opacity-50 cursor-not-allowed" : ""
-                    }`}
+                    className={`px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer text-sm font-medium transition-colors inline-block ${loading ? "opacity-50 cursor-not-allowed" : ""
+                      }`}
                   >
                     {loading ? "Parsing..." : fileName ? "Change File" : "Upload File"}
                   </label>
@@ -742,7 +740,7 @@ export default function ExcelPage() {
                               const group = rowObj.group;
                               const item = rowObj.item;
 
-                              const cells: JSX.Element[] = [];
+                              const cells: React.JSX.Element[] = [];
 
                               // Item name
                               const isEditingName = editingCell?.type === "itemName" && editingCell.gid === group.gid && editingCell.iid === item.iid;
@@ -806,11 +804,10 @@ export default function ExcelPage() {
                                 const isEditingStatus = editingCell?.type === "status" && editingCell.gid === group.gid && editingCell.iid === item.iid && editingCell.teamIdx === teamIdx;
 
                                 cells.push(
-                                  <td key={`status-${teamIdx}`} className={`px-6 py-3 text-sm font-medium ${
-                                    t.status.includes("Done") && !t.status.includes("Not Done") ? "text-green-600" :
+                                  <td key={`status-${teamIdx}`} className={`px-6 py-3 text-sm font-medium ${t.status.includes("Done") && !t.status.includes("Not Done") ? "text-green-600" :
                                     t.status.includes("Not Done") ? "text-red-600" :
-                                    "text-blue-600"
-                                  }`}>
+                                      "text-blue-600"
+                                    }`}>
                                     {isEditingStatus ? (
                                       <input
                                         autoFocus

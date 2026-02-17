@@ -54,7 +54,7 @@ export default function RegisterPage() {
       const { data, error } = await authClient.signUp.email({
         email,
         password,
-        name: name || undefined,
+        name,
         // If you have email verification enabled and want to redirect after verification:
         // callbackURL: "/excel",
       });

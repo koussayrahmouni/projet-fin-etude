@@ -27,62 +27,62 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setLoading(true);
-  setMessage(null);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage(null);
 
-  try {
-    const { error } = await authClient.signIn.email({
-      email: email.trim(),
-      password,
-    });
+    try {
+      const { error } = await authClient.signIn.email({
+        email: email.trim(),
+        password,
+      });
 
-    if (error) {
+      if (error) {
+        setMessage({
+          text: error.message || "Invalid email or password",
+          type: "error",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Get the logged-in user info after login
+      const res = await fetch("/api/me"); // you need an endpoint to get session user
+      const user = await res.json();
+
+      // Redirect based on role
+      switch (user.role) {
+        case "superadmin":
+          router.push("/superadmin");
+          break;
+        case "admin":
+          router.push("/admin");
+          break;
+        case "collaborator":
+          router.push("/workspace");
+          break;
+        case "client":
+        default:
+          router.push("/dashboard");
+      }
+
+      router.refresh();
+    } catch (err) {
       setMessage({
-        text: error.message || "Invalid email or password",
+        text: "Something went wrong. Please try again.",
         type: "error",
       });
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // Get the logged-in user info after login
-    const res = await fetch("/api/me"); // you need an endpoint to get session user
-    const user = await res.json();
-
-    // Redirect based on role
-    switch (user.role) {
-      case "superadmin":
-        router.push("/superadmin");
-        break;
-      case "admin":
-        router.push("/admin");
-        break;
-      case "collaborator":
-        router.push("/workspace");
-        break;
-      case "client":
-      default:
-        router.push("/dashboard");
-    }
-
-    router.refresh();
-  } catch (err) {
-    setMessage({
-      text: "Something went wrong. Please try again.",
-      type: "error",
-    });
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
 
   const handleGoogleSignIn = () => {
     authClient.signIn.social({
       provider: "google",
-      callbackUrl: "/excel", // redirects to /excel after successful Google sign-in
+      callbackURL: "/excel", // redirects to /excel after successful Google sign-in
     });
   };
 

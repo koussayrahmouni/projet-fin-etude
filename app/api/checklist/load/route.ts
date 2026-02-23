@@ -11,7 +11,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const userId = session.user.id;
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
 
@@ -19,18 +18,27 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Missing id" }, { status: 400 });
   }
 
+  // Any authenticated user can load any checklist (shared workspace)
   const result = await pool.query(
     `
-    SELECT id, client_name, client_info, data, created_at, updated_at
-    FROM checklist_sessions
-    WHERE id = $1 AND user_id = $2
+    SELECT cs.id, cs.client_name, cs.client_info, cs.data, cs.version,
+           cs.created_at, cs.updated_at, cs.user_id,
+           u.name AS created_by_name, u.email AS created_by_email
+    FROM checklist_sessions cs
+    LEFT JOIN users u ON cs.user_id = u.id
+    WHERE cs.id = $1
     `,
-    [id, userId]
+    [id]
   );
 
   if (result.rowCount === 0) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  return NextResponse.json(result.rows[0]);
+  const row = result.rows[0];
+  return NextResponse.json({
+    ...row,
+    created_by: row.created_by_name || row.created_by_email || "Unknown",
+    is_owner: row.user_id === session.user.id,
+  });
 }

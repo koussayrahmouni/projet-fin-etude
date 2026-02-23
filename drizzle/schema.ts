@@ -7,6 +7,7 @@ import {
   timestamp,
   jsonb,
   index,
+  integer,
   bigint,
   boolean,        // ← MUST be here
   primaryKey,     // for the compound key in accounts
@@ -111,11 +112,13 @@ export const excelSessions = pgTable(
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     filename: text("filename"),
     data: jsonb("data").notNull(),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (table) => ({
     userIdIdx: index("excel_sessions_user_id_idx").on(table.userId),
+    userSessionIdx: index("excel_sessions_user_session_idx").on(table.userId, table.id),
   })
 );
 
@@ -128,11 +131,30 @@ export const checklistSessions = pgTable(
     clientName: text("client_name").notNull(),
     clientInfo: jsonb("client_info"),
     data: jsonb("data").notNull(),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (table) => ({
     userIdIdx: index("checklist_sessions_user_id_idx").on(table.userId),
+    userChecklistIdx: index("checklist_sessions_user_checklist_idx").on(table.userId, table.id),
+  })
+);
+
+// Active editors presence tracking
+// Each row = "this user is currently editing this checklist"
+// Rows older than 30 seconds are considered stale (user left)
+export const checklistPresence = pgTable(
+  "checklist_presence",
+  {
+    checklistId: uuid("checklist_id").notNull().references(() => checklistSessions.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    userName: varchar("user_name", { length: 100 }),
+    lastSeen: timestamp("last_seen", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.checklistId, table.userId] }),
+    checklistIdx: index("checklist_presence_checklist_idx").on(table.checklistId),
   })
 );
 

@@ -52,13 +52,25 @@ export default function ExcelPage() {
       : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
     }`;
 
+  const versionRef = useRef<number | null>(null);
+  const [conflict, setConflict] = useState(false);
+
   // ─── Session & Autosave ────────────────────────────────────────────────
+  // Use sessionStorage (per-tab) instead of localStorage (shared across tabs)
+  // This prevents two tabs from autosaving to the same session and overwriting each other
   function getSessionId() {
     if (typeof window === "undefined") return null;
-    let id = localStorage.getItem("excel_session_id");
+    let id = sessionStorage.getItem("excel_session_id");
     if (!id) {
-      id = uuid();
-      localStorage.setItem("excel_session_id", id);
+      // Check localStorage for backwards compatibility, then migrate
+      id = localStorage.getItem("excel_session_id");
+      if (id) {
+        sessionStorage.setItem("excel_session_id", id);
+        localStorage.removeItem("excel_session_id");
+      } else {
+        id = uuid();
+        sessionStorage.setItem("excel_session_id", id);
+      }
     }
     return id;
   }
@@ -76,7 +88,16 @@ export default function ExcelPage() {
           sessionId: sessionIdRef.current,
           filename: filename || fileName || "unnamed.xlsx",
           data,
+          version: versionRef.current,
         }),
+      }).then(async (res) => {
+        if (res.status === 409) {
+          setConflict(true);
+        } else if (res.ok) {
+          const result = await res.json();
+          versionRef.current = result.version;
+          setConflict(false);
+        }
       }).catch((err) => console.error("Autosave failed:", err));
     }, 800);
   }
@@ -104,6 +125,7 @@ export default function ExcelPage() {
           if (saved.data.fileName) setFileName(saved.data.fileName);
           if (saved.data.viewMode) setViewMode(saved.data.viewMode);
         }
+        if (saved?.version != null) versionRef.current = saved.version;
       })
       .catch((err) => console.error("Failed to load session:", err));
   }, []);
@@ -593,6 +615,27 @@ export default function ExcelPage() {
                 )}
               </div>
             </div>
+
+            {/* Conflict warning banner */}
+            {conflict && (
+              <div className="mb-4 bg-amber-50 border border-amber-300 rounded-2xl p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <svg className="w-5 h-5 text-amber-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+                    <path d="M12 9v4" /><path d="M12 17h.01" />
+                  </svg>
+                  <p className="text-sm text-amber-800 font-medium">
+                    This session was modified in another tab. Your latest changes could not be saved.
+                  </p>
+                </div>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-lg hover:bg-amber-700 transition-colors shrink-0"
+                >
+                  Refresh
+                </button>
+              </div>
+            )}
 
             {excelData.length === 0 && !loading && (
               <div

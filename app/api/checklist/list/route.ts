@@ -11,16 +11,15 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const userId = session.user.id;
-
+  // Show ALL checklists to all authenticated users (shared workspace)
   const result = await pool.query(
     `
-    SELECT id, client_name, client_info, data, updated_at
-    FROM checklist_sessions
-    WHERE user_id = $1
-    ORDER BY updated_at DESC
-    `,
-    [userId]
+    SELECT cs.id, cs.client_name, cs.client_info, cs.data, cs.updated_at, cs.user_id,
+           u.name AS created_by_name, u.email AS created_by_email
+    FROM checklist_sessions cs
+    LEFT JOIN users u ON cs.user_id = u.id
+    ORDER BY cs.updated_at DESC
+    `
   );
 
   const checklists = result.rows.map((row) => {
@@ -38,6 +37,8 @@ export async function GET(req: Request) {
       id: row.id,
       clientName: row.client_name,
       updatedAt: row.updated_at,
+      createdBy: row.created_by_name || row.created_by_email || "Unknown",
+      isOwner: row.user_id === session.user.id,
       progress: total > 0 ? Math.round((done / total) * 100) : 0,
       totalItems: total,
       doneItems: done,

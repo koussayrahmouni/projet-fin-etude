@@ -43,6 +43,8 @@ type SavedChecklist = {
   id: string;
   clientName: string;
   updatedAt: string;
+  createdBy: string;
+  isOwner: boolean;
   progress: number;
   totalItems: number;
   doneItems: number;
@@ -217,18 +219,76 @@ export default function ChecklistPage() {
   const [data, setData] = useState<ChecklistData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [conflict, setConflict] = useState(false);
+  const versionRef = useRef<number | null>(null);
   const [showNewForm, setShowNewForm] = useState(false);
   const [newClientName, setNewClientName] = useState("");
   const [newClientInfo, setNewClientInfo] = useState<ClientInfo>({ offre: "", prestation: "", infra: "", gouvernance: "" });
   const [collapsedSections, setCollapsedSections] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeEditors, setActiveEditors] = useState<{ user_id: string; user_name: string }[]>([]);
 
   const saveTimeout = useRef<any>(null);
+  const presenceInterval = useRef<any>(null);
 
   // ─── Load checklist list on mount ──────────────────────────────────────
   useEffect(() => {
     loadChecklists();
   }, []);
+
+  // ─── Presence: heartbeat + poll for other editors ────────────────────
+  useEffect(() => {
+    if (!activeId) {
+      // Clear presence when no checklist is open
+      setActiveEditors([]);
+      if (presenceInterval.current) clearInterval(presenceInterval.current);
+      return;
+    }
+
+    // Send heartbeat and check for other editors
+    async function sendHeartbeat() {
+      try {
+        await fetch("/api/checklist/presence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ checklistId: activeId }),
+        });
+      } catch {}
+    }
+
+    async function pollEditors() {
+      try {
+        const res = await fetch(`/api/checklist/presence?checklistId=${activeId}`);
+        if (res.ok) {
+          const { editors } = await res.json();
+          // Only update state if editors actually changed (avoid unnecessary re-renders)
+          setActiveEditors((prev) => {
+            const prevIds = prev.map((e) => e.user_id).join(",");
+            const newIds = editors.map((e: { user_id: string }) => e.user_id).join(",");
+            return prevIds === newIds ? prev : editors;
+          });
+        }
+      } catch {}
+    }
+
+    // Initial heartbeat + poll
+    sendHeartbeat();
+    pollEditors();
+
+    // Repeat every 10 seconds
+    presenceInterval.current = setInterval(() => {
+      sendHeartbeat();
+      pollEditors();
+    }, 10000);
+
+    // Cleanup: tell server we left when unmounting or switching checklists
+    return () => {
+      if (presenceInterval.current) clearInterval(presenceInterval.current);
+      if (activeId) {
+        fetch(`/api/checklist/presence?checklistId=${activeId}`, { method: "DELETE" }).catch(() => {});
+      }
+    };
+  }, [activeId]);
 
   async function loadChecklists() {
     try {
@@ -248,6 +308,7 @@ export default function ChecklistPage() {
   async function loadChecklist(id: string) {
     try {
       setLoading(true);
+      setConflict(false);
       const res = await fetch(`/api/checklist/load?id=${id}`);
       if (!res.ok) throw new Error("Load failed");
       const row = await res.json();
@@ -255,6 +316,7 @@ export default function ChecklistPage() {
       setClientName(row.client_name);
       setClientInfo(typeof row.client_info === "string" ? JSON.parse(row.client_info) : row.client_info || { offre: "", prestation: "", infra: "", gouvernance: "" });
       setData(typeof row.data === "string" ? JSON.parse(row.data) : row.data);
+      versionRef.current = row.version ?? null;
       setShowNewForm(false);
     } catch (err) {
       console.error("Failed to load checklist:", err);
@@ -292,14 +354,24 @@ export default function ChecklistPage() {
   async function doSave(id: string, name: string, info: ClientInfo, checklistData: ChecklistData) {
     setSaving(true);
     try {
-      await fetch("/api/checklist/save", {
+      const res = await fetch("/api/checklist/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, clientName: name, clientInfo: info, data: checklistData }),
+        body: JSON.stringify({ id, clientName: name, clientInfo: info, data: checklistData, version: versionRef.current }),
       });
-      // Refresh list
-      const res = await fetch("/api/checklist/list");
-      if (res.ok) setChecklists(await res.json());
+
+      if (res.status === 409) {
+        // Version conflict — another user/tab modified this checklist
+        setConflict(true);
+        return;
+      }
+
+      if (res.ok) {
+        const result = await res.json();
+        versionRef.current = result.version;
+        setConflict(false);
+      }
+
     } catch (err) {
       console.error("Save failed:", err);
     } finally {
@@ -437,21 +509,30 @@ export default function ChecklistPage() {
             clearInterval(pollInterval);
             setAnsibleRunning((prev) => ({ ...prev, [sectionNumber]: false }));
 
-            if (statusData.items && data) {
-              // Update checklist items with Ansible results
-              const updatedData = { ...data };
-              const section = updatedData.sections.find((s: ChecklistSection) => s.number === sectionNumber);
-              if (section) {
-                for (const ansibleItem of statusData.items) {
-                  const item = section.items.find((i: ChecklistItem) => i.id === ansibleItem.id);
-                  if (item) {
-                    item.status = ansibleItem.status as ChecklistItem["status"];
-                    if (ansibleItem.detail) {
-                      item.comment = `[Ansible] ${ansibleItem.detail}`;
+            if (statusData.items && activeId) {
+              // Fetch the LATEST data from DB before merging Ansible results
+              // This prevents overwriting changes made by other users during the Ansible run
+              const freshRes = await fetch(`/api/checklist/load?id=${activeId}`);
+              if (freshRes.ok) {
+                const freshRow = await freshRes.json();
+                const freshData = typeof freshRow.data === "string" ? JSON.parse(freshRow.data) : freshRow.data;
+                versionRef.current = freshRow.version ?? null;
+
+                const section = freshData.sections.find((s: ChecklistSection) => s.number === sectionNumber);
+                if (section) {
+                  for (const ansibleItem of statusData.items) {
+                    const item = section.items.find((i: ChecklistItem) => i.id === ansibleItem.id);
+                    if (item) {
+                      item.status = ansibleItem.status as ChecklistItem["status"];
+                      if (ansibleItem.detail) {
+                        item.comment = `[Ansible] ${ansibleItem.detail}`;
+                      }
                     }
                   }
+                  setData(freshData);
+                  // Save the merged result
+                  doSave(activeId, clientName, clientInfo, freshData);
                 }
-                setData(updatedData);
               }
               alert(`Section ${sectionNumber} (${sectionName}) verification complete!\n\nResults have been applied to the checklist.`);
             } else if (statusData.status === "failed") {
@@ -837,7 +918,7 @@ export default function ChecklistPage() {
                     <option value="">Select a checklist...</option>
                     {checklists.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.clientName} ({c.progress}%)
+                        {c.clientName} ({c.progress}%) — by {c.createdBy}
                       </option>
                     ))}
                   </select>
@@ -1001,6 +1082,60 @@ export default function ChecklistPage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Active editors presence indicator */}
+                  {activeEditors.length > 0 && (
+                    <div className="lg:col-span-3 bg-blue-50 border border-blue-200 rounded-2xl px-4 py-3 flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        {/* Animated pulsing dot */}
+                        <span className="relative flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                        </span>
+                        <span className="text-sm text-blue-800 font-medium">
+                          {activeEditors.length === 1
+                            ? `${activeEditors[0].user_name} is currently editing this checklist`
+                            : `${activeEditors.map(e => e.user_name).join(", ")} are currently editing this checklist`
+                          }
+                        </span>
+                      </div>
+                      {/* Editor avatars */}
+                      <div className="flex -space-x-2 ml-auto">
+                        {activeEditors.map((editor) => (
+                          <div
+                            key={editor.user_id}
+                            className="w-7 h-7 rounded-full bg-blue-500 border-2 border-blue-50 flex items-center justify-center"
+                            title={editor.user_name}
+                          >
+                            <span className="text-xs font-bold text-white">
+                              {(editor.user_name || "?").charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Conflict warning banner */}
+                  {conflict && (
+                    <div className="lg:col-span-3 bg-amber-50 border border-amber-300 rounded-2xl p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <svg className="w-5 h-5 text-amber-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+                          <path d="M12 9v4" /><path d="M12 17h.01" />
+                        </svg>
+                        <p className="text-sm text-amber-800 font-medium">
+                          This checklist was modified by another user or tab. Your latest changes could not be saved.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => { if (activeId) loadChecklist(activeId); }}
+                        className="px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-lg hover:bg-amber-700 transition-colors shrink-0"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                  )}
 
                   {/* Overall progress */}
                   <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6 flex flex-col justify-center">
@@ -1169,18 +1304,27 @@ export default function ChecklistPage() {
                     >
                       <div className="flex justify-between items-start">
                         <h3 className="font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">{c.clientName}</h3>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteChecklist(c.id);
-                          }}
-                          className="text-slate-300 hover:text-red-500 transition-colors"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
+                        {c.isOwner && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteChecklist(c.id);
+                            }}
+                            className="text-slate-300 hover:text-red-500 transition-colors"
+                            title="Delete (owner only)"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
                       </div>
+                      <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0" />
+                        </svg>
+                        {c.createdBy}{c.isOwner ? " (you)" : ""}
+                      </p>
                       <div className="mt-3 w-full bg-slate-200 rounded-full h-2">
                         <div
                           className={`h-2 rounded-full transition-all ${c.progress === 100 ? "bg-green-500" : "bg-blue-500"}`}

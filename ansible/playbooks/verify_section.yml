@@ -1,0 +1,39 @@
+---
+# Dynamic playbook - runs a single section by number
+# Usage: ansible-playbook playbooks/verify_section.yml -e "section=1 client_name=Nexity"
+# This is what AWX calls when triggered from the web UI
+
+- name: "B2R Checklist - Single Section Verification"
+  hosts: local
+  gather_facts: false
+  tasks:
+    - name: Validate section parameter
+      assert:
+        that:
+          - section is defined
+          - section | int >= 1
+          - section | int <= 8
+        fail_msg: "section must be between 1 and 8. Got: {{ section | default('undefined') }}"
+
+    - name: Map section number to playbook
+      set_fact:
+        section_playbook: >-
+          {%- set map = {
+            '1': 'verify_jira.yml',
+            '2': 'verify_dollar_universe.yml',
+            '3': 'verify_plan_production.yml',
+            '4': 'verify_env_applicatif.yml',
+            '5': 'verify_monitoring.yml',
+            '6': 'verify_livrables.yml',
+            '7': 'verify_systeme_infra.yml',
+            '8': 'verify_security.yml'
+          } -%}
+          {{ map[section | string] }}
+
+    - name: Display selected section
+      debug:
+        msg: "Running section {{ section }}: {{ section_playbook }}"
+
+# Unfortunately ansible can't dynamically import playbooks,
+# so we include all and use tags/when conditions
+# For AWX, create separate job templates per section instead.

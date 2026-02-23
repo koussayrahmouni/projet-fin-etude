@@ -4,6 +4,10 @@ import { db } from "@/lib/db";
 import { users, sessions, accounts } from "@/drizzle/schema"; // <-- corrected path
 
 export const auth = betterAuth({
+  trustedOrigins: [
+    "http://localhost:3000",
+    "http://10.7.157.105:3000",
+  ],
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {

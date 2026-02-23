@@ -1,0 +1,141 @@
+# Kubernetes Services + Endpoints for Docker containers
+# These allow Traefik (k3s ingress) to route traffic to Docker services running on the host
+# The Endpoints point to the node IP (10.7.157.105) where Docker containers expose their ports
+
+---
+# Jenkins Service (port 8089)
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins-docker
+  namespace: default
+spec:
+  ports:
+    - port: 8089
+      targetPort: 8089
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: jenkins-docker
+  namespace: default
+subsets:
+  - addresses:
+      - ip: 10.7.157.105
+    ports:
+      - port: 8089
+
+---
+# GitLab Service (port 8082)
+apiVersion: v1
+kind: Service
+metadata:
+  name: gitlab-docker
+  namespace: default
+spec:
+  ports:
+    - port: 8082
+      targetPort: 8082
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: gitlab-docker
+  namespace: default
+subsets:
+  - addresses:
+      - ip: 10.7.157.105
+    ports:
+      - port: 8082
+
+---
+# OpenProject Service (port 8083)
+apiVersion: v1
+kind: Service
+metadata:
+  name: openproject-docker
+  namespace: default
+spec:
+  ports:
+    - port: 8083
+      targetPort: 8083
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: openproject-docker
+  namespace: default
+subsets:
+  - addresses:
+      - ip: 10.7.157.105
+    ports:
+      - port: 8083
+
+---
+# Prometheus Service (port 9090)
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-docker
+  namespace: default
+spec:
+  ports:
+    - port: 9090
+      targetPort: 9090
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: prometheus-docker
+  namespace: default
+subsets:
+  - addresses:
+      - ip: 10.7.157.105
+    ports:
+      - port: 9090
+
+---
+# Grafana Service (port 3001)
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-docker
+  namespace: default
+spec:
+  ports:
+    - port: 3001
+      targetPort: 3001
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: grafana-docker
+  namespace: default
+subsets:
+  - addresses:
+      - ip: 10.7.157.105
+    ports:
+      - port: 3001
+
+---
+# Alertmanager Service (port 9093)
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager-docker
+  namespace: default
+spec:
+  ports:
+    - port: 9093
+      targetPort: 9093
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: alertmanager-docker
+  namespace: default
+subsets:
+  - addresses:
+      - ip: 10.7.157.105
+    ports:
+      - port: 9093

@@ -1,0 +1,22 @@
+---
+# Master playbook - runs all B2R checklist sections
+# Usage: ansible-playbook playbooks/verify_all.yml -e "client_name=Nexity"
+# Or run individual sections:
+#   ansible-playbook playbooks/verify_security.yml -e "client_name=Nexity"
+
+- name: "B2R Checklist - Full Verification"
+  hosts: local
+  gather_facts: false
+  tasks:
+    - name: Display verification start
+      debug:
+        msg: "Starting B2R checklist verification for client: {{ client_name | default('default') }}"
+
+- import_playbook: verify_jira.yml
+- import_playbook: verify_dollar_universe.yml
+- import_playbook: verify_plan_production.yml
+- import_playbook: verify_env_applicatif.yml
+- import_playbook: verify_monitoring.yml
+- import_playbook: verify_livrables.yml
+- import_playbook: verify_systeme_infra.yml
+- import_playbook: verify_security.yml

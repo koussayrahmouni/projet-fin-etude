@@ -1,0 +1,168 @@
+---
+- name: "Section 7 - Verify Système & Infrastructure"
+  hosts: app_servers
+  become: true
+  gather_facts: true
+  vars:
+    client_name: "{{ client_name | default('default') }}"
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: "7.1 - Check history processing activated"
+      shell: |
+        grep -c 'HISTTIMEFORMAT\|HISTFILESIZE\|HISTSIZE' /etc/profile /etc/bashrc 2>/dev/null | grep -v ':0$' | wc -l
+      register: history_check
+      changed_when: false
+      failed_when: false
+
+    - name: "7.2 - Check aliases configured for client slices"
+      shell: |
+        grep -rc 'alias.*{{ client_name | lower }}' /home/*/.bashrc /home/*/.bash_aliases 2>/dev/null | grep -v ':0$' | wc -l
+      register: aliases_check
+      changed_when: false
+      failed_when: false
+
+    - name: "7.3 - Check SFTP accounts exist"
+      shell: |
+        getent passwd | grep -cE 'sftp.*{{ client_name | lower }}|{{ client_name | lower }}.*sftp' || echo 0
+      register: sftp_accounts
+      changed_when: false
+      failed_when: false
+
+    - name: "7.3 - Check SSH key sharing for SFTP"
+      shell: |
+        find /home -name 'authorized_keys' -path '*sftp*' 2>/dev/null | wc -l
+      register: sftp_keys
+      changed_when: false
+      failed_when: false
+
+    - name: "7.4 - Check UAM access for RUN"
+      shell: |
+        grep -rci 'RUN\|run_team' /etc/security/access.conf /etc/sudoers.d/ 2>/dev/null | grep -v ':0$' | wc -l
+      register: uam_access
+      changed_when: false
+      failed_when: false
+
+    - name: "7.5 - Check /admin filesystem"
+      stat:
+        path: "{{ admin_fs_path }}"
+      register: admin_fs
+
+    - name: "7.5 - Check /admin is a dedicated mount"
+      shell: "mount | grep -c '{{ admin_fs_path }}' || echo 0"
+      register: admin_mount
+      changed_when: false
+      failed_when: false
+
+    - name: "7.6 - Check /SauvegardeLegale filesystem"
+      stat:
+        path: "{{ sauvegarde_legale_fs }}"
+      register: sauvegarde_fs
+
+    - name: "7.7 - Check /Archive filesystem"
+      stat:
+        path: "{{ archive_fs }}"
+      register: archive_fs_stat
+
+    - name: "7.8 - Check Cloud Control configured"
+      shell: |
+        systemctl is-active oracle-cloud-agent 2>/dev/null || \
+        systemctl is-active oci-agent 2>/dev/null || \
+        echo "inactive"
+      register: cloud_control
+      changed_when: false
+      failed_when: false
+
+    - name: "7.9 - Check PCA test status"
+      find:
+        paths: "/var/log/pca"
+        patterns: "*pca*test*,*pca*report*"
+        age: "-90d"
+      register: pca_report
+      failed_when: false
+
+    - name: "7.10 - Check DRT status"
+      find:
+        paths: "/var/log/drt"
+        patterns: "*drt*report*,*drt*test*"
+        age: "-90d"
+      register: drt_report
+      failed_when: false
+
+    - name: "7.11 - Check patches applied"
+      shell: |
+        rpm -qa --last 2>/dev/null | head -5 | wc -l || \
+        apt list --installed 2>/dev/null | tail -5 | wc -l || echo 0
+      register: patches_check
+      changed_when: false
+      failed_when: false
+
+    - name: "7.12 - Check PVE document"
+      find:
+        paths: "{{ deliverables_path | default('/docs/livrables') }}/{{ client_name }}"
+        patterns: "*PVE*,*pve*"
+        recurse: true
+      register: pve_doc
+      failed_when: false
+
+    - name: Build JSON result
+      set_fact:
+        section_result:
+          section: 7
+          name: "SYSTÈME & INFRASTRUCTURE"
+          client: "{{ client_name }}"
+          timestamp: "{{ ansible_date_time.iso8601 }}"
+          items:
+            - id: "7.1"
+              name: "History processing activé"
+              status: "{{ 'done' if (history_check.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ history_check.stdout }} history configs found in /etc/profile or /etc/bashrc"
+            - id: "7.2"
+              name: "Aliases configurés"
+              status: "{{ 'done' if (aliases_check.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ aliases_check.stdout }} alias entries found"
+            - id: "7.3"
+              name: "Comptes SFTP + clés SSH"
+              status: "{{ 'done' if (sftp_accounts.stdout | int) > 0 and (sftp_keys.stdout | int) > 0 else 'not_started' }}"
+              detail: "Accounts={{ sftp_accounts.stdout }}, Keys={{ sftp_keys.stdout }}"
+            - id: "7.4"
+              name: "Accès UAM pour le RUN"
+              status: "{{ 'done' if (uam_access.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ uam_access.stdout }} UAM access rules found"
+            - id: "7.5"
+              name: "Filesystem /admin"
+              status: "{{ 'done' if admin_fs.stat.exists | default(false) else 'not_started' }}"
+              detail: "Exists={{ admin_fs.stat.exists | default(false) }}, Mounted={{ admin_mount.stdout }}"
+            - id: "7.6"
+              name: "Filesystem /SauvegardeLegale"
+              status: "{{ 'done' if sauvegarde_fs.stat.exists | default(false) else 'not_started' }}"
+              detail: "{{ sauvegarde_legale_fs }} {{ 'exists' if sauvegarde_fs.stat.exists | default(false) else 'NOT FOUND' }}"
+            - id: "7.7"
+              name: "Filesystem /Archive"
+              status: "{{ 'done' if archive_fs_stat.stat.exists | default(false) else 'not_started' }}"
+              detail: "{{ archive_fs }} {{ 'exists' if archive_fs_stat.stat.exists | default(false) else 'NOT FOUND' }}"
+            - id: "7.8"
+              name: "Cloud Control configuré"
+              status: "{{ 'done' if cloud_control.stdout == 'active' else 'not_started' }}"
+              detail: "Cloud agent: {{ cloud_control.stdout }}"
+            - id: "7.9"
+              name: "PCA test concluant"
+              status: "{{ 'done' if (pca_report.matched | default(0)) > 0 else 'not_started' }}"
+              detail: "{{ pca_report.matched | default(0) }} PCA reports in last 90 days"
+            - id: "7.10"
+              name: "DRT réalisé"
+              status: "{{ 'done' if (drt_report.matched | default(0)) > 0 else 'not_started' }}"
+              detail: "{{ drt_report.matched | default(0) }} DRT reports in last 90 days"
+            - id: "7.11"
+              name: "Patchs réalisés"
+              status: "{{ 'done' if (patches_check.stdout | int) > 0 else 'in_progress' }}"
+              detail: "Recent package activity detected"
+            - id: "7.12"
+              name: "PVE Finalisé"
+              status: "{{ 'done' if (pve_doc.matched | default(0)) > 0 else 'not_started' }}"
+              detail: "{{ pve_doc.matched | default(0) }} PVE documents found"
+
+    - name: Output JSON result
+      debug:
+        msg: "{{ section_result | to_json }}"

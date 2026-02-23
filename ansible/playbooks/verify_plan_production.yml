@@ -1,0 +1,97 @@
+---
+- name: "Section 3 - Verify Plan de Production"
+  hosts: app_servers
+  become: true
+  gather_facts: true
+  vars:
+    client_name: "{{ client_name | default('default') }}"
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: "3.1 - Check production plan configuration"
+      shell: |
+        if [ -f /etc/production_plan/{{ client_name | lower }}.conf ]; then
+          grep -c 'type={{ production_plan_type }}' /etc/production_plan/{{ client_name | lower }}.conf || echo 0
+        else
+          echo "missing"
+        fi
+      register: prod_plan
+      changed_when: false
+      failed_when: false
+
+    - name: "3.2 - Check payroll cycle execution logs"
+      shell: |
+        find /var/log/payroll -name "*{{ client_name | lower }}*" -mtime -30 2>/dev/null | wc -l
+      register: payroll_logs
+      changed_when: false
+      failed_when: false
+
+    - name: "3.3 - Check refresh session configuration (Consigne MAIA 421)"
+      shell: |
+        grep -r 'refresh_session' /etc/maia/conf.d/ 2>/dev/null | grep -ci '{{ client_name | lower }}' || echo 0
+      register: refresh_session
+      changed_when: false
+      failed_when: false
+
+    - name: "3.4 - Check legal backup setup"
+      stat:
+        path: "{{ backup_legal_path }}/{{ client_name }}"
+      register: legal_backup
+
+    - name: "3.4 - Check legal backup cron"
+      shell: "crontab -l 2>/dev/null | grep -c 'sauvegarde_legale' || echo 0"
+      register: legal_backup_cron
+      changed_when: false
+      failed_when: false
+
+    - name: "3.5 - Check purge sessions"
+      shell: |
+        crontab -l 2>/dev/null | grep -c 'purge' || echo 0
+      register: purge_cron
+      changed_when: false
+      failed_when: false
+
+    - name: "3.6 - Check bulletin counting (JetPrefac)"
+      shell: |
+        find /opt/jetprefac -name "*{{ client_name | lower }}*" 2>/dev/null | wc -l
+      register: jetprefac
+      changed_when: false
+      failed_when: false
+
+    - name: Build JSON result
+      set_fact:
+        section_result:
+          section: 3
+          name: "PLAN DE PRODUCTION"
+          client: "{{ client_name }}"
+          timestamp: "{{ ansible_date_time.iso8601 }}"
+          items:
+            - id: "3.1"
+              name: "Plan de production standard"
+              status: "{{ 'done' if prod_plan.stdout not in ['missing', '0'] else 'not_started' }}"
+              detail: "Production plan config: {{ prod_plan.stdout }}"
+            - id: "3.2"
+              name: "Exécution cycle de paie"
+              status: "{{ 'done' if (payroll_logs.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ payroll_logs.stdout }} payroll log files in last 30 days"
+            - id: "3.3"
+              name: "Session de rafraîchissement"
+              status: "{{ 'done' if (refresh_session.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ refresh_session.stdout }} refresh configs found"
+            - id: "3.4"
+              name: "Sauvegarde légale"
+              status: "{{ 'done' if (legal_backup.stat.exists | default(false)) and (legal_backup_cron.stdout | int) > 0 else 'not_started' }}"
+              detail: "Dir={{ legal_backup.stat.exists | default(false) }}, Cron={{ legal_backup_cron.stdout }}"
+            - id: "3.5"
+              name: "Purges activées"
+              status: "{{ 'done' if (purge_cron.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ purge_cron.stdout }} purge cron entries"
+            - id: "3.6"
+              name: "Sessions comptage bulletins (JetPrefac)"
+              status: "{{ 'done' if (jetprefac.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ jetprefac.stdout }} JetPrefac configs found"
+
+    - name: Output JSON result
+      debug:
+        msg: "{{ section_result | to_json }}"

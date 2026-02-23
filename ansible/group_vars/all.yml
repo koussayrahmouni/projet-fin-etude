@@ -1,16 +1,82 @@
-# Non-sensitive defaults. Move secrets to ansible/vault/secret.yml (see README-ANSIBLE-JIRA.md).
-jira_url: "http://localhost:8081"   # change to your Jira URL
-jira_user: "mock"          # kept here for clarity, but put real secret in vault
-jira_api_token: "mock"        # placeholder (use ansible-vault)
-service_desk_project_key: "SD"              # change to your SD project key
+# ============================================================
+# B2R Checklist - Ansible Variables
+# ============================================================
+# Non-sensitive defaults. Move secrets to ansible-vault.
+# Usage: ansible-playbook playbooks/<section>.yml -e "client_name=Nexity"
+
+# --- Section 1: JIRA ---
+jira_url: "http://localhost:8081"
+jira_user: "mock"
+jira_api_token: "mock"
+service_desk_project_key: "SD"
 default_transition_names:
   - Done
   - Closed
   - "Clôturé"
   - Resolved
 
+# --- Section 2: Dollar Universe ---
+du_install_path: "/opt/dollar_universe"
+du_admin_path: "/admin"
+du_log_backup_path: "/var/log/dollar_universe"
+du_cluster_mode: true
 
+# --- Section 3: Plan de Production ---
+production_plan_type: "standard"  # standard or dedicated
+payroll_cycle_test: true
+backup_legal_path: "/SauvegardeLegale"
+purge_sessions_enabled: true
 
+# --- Section 4: Environnement Applicatif ---
+app_services:
+  - { name: "EDSN", xmx: "4G", port: 8080 }
+  - { name: "EVEMED", xmx: "4G", port: 8081 }
+  - { name: "M2M-SIMU", xmx: "4G", port: 8082 }
+  - { name: "service-query", xmx: "10G", port: 8083 }
+  - { name: "service-openhr", xmx: "2G", port: 8084 }
+  - { name: "service-4you", xmx: "10G", port: 8085 }
+  - { name: "tomweb", xmx: "6G", port: 8086 }
+  - { name: "tomtools", xmx: "2G", port: 8087 }
+  - { name: "tombatch", xmx: "4G", port: 8088 }
+appv55_host: "appv55.internal"
+java_min_version: "17"
+tomcat_min_version: "10"
 
+# --- Section 5: Monitoring ---
+maia_url: "http://maia.internal"
+zabbix_url: "http://zabbix.internal"
+zabbix_user: "Admin"
+zabbix_password: "zabbix"  # use vault in production
+monitoring_urls: []
+khronos_enabled: true
 
+# --- Section 6: Livrables ---
+deliverables_path: "/docs/livrables"
+required_documents:
+  - "DAT"
+  - "Specifications_Techniques"
+  - "Matrice_Flux_Interne"
+  - "Matrice_Flux_WAN"
+  - "SPEC_LB"
+  - "Consignes_Maia"
+  - "Cahier_Exploitation"
 
+# --- Section 7: Système & Infrastructure ---
+sftp_users: []
+admin_fs_path: "/admin"
+sauvegarde_legale_fs: "/SauvegardeLegale"
+archive_fs: "/Archive"
+cloud_control_enabled: true
+
+# --- Section 8: Security ---
+trend_micro_service: "ds_agent"
+edr_service: "falcon-sensor"  # CrowdStrike example
+soc_integration: true
+mfa_enabled: true
+shrs_user: "shrs"
+oracle_default_accounts:
+  - "SCOTT"
+  - "HR"
+  - "OE"
+  - "SH"
+  - "DBSNMP"

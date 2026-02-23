@@ -1,0 +1,113 @@
+---
+- name: "Section 6 - Verify Livrables (Deliverables)"
+  hosts: local
+  gather_facts: true
+  vars:
+    client_name: "{{ client_name | default('default') }}"
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: "6.1 - Check DAT document exists"
+      find:
+        paths: "{{ deliverables_path }}/{{ client_name }}"
+        patterns: "*DAT*,*architecture*technique*"
+        recurse: true
+        file_type: file
+      register: dat_doc
+      failed_when: false
+
+    - name: "6.2 - Check Specifications Techniques"
+      find:
+        paths: "{{ deliverables_path }}/{{ client_name }}"
+        patterns: "*spec*technique*,*specification*"
+        recurse: true
+        file_type: file
+      register: spec_doc
+      failed_when: false
+
+    - name: "6.3 - Check Matrice de Flux Interne"
+      find:
+        paths: "{{ deliverables_path }}/{{ client_name }}"
+        patterns: "*matrice*flux*interne*,*flux_interne*"
+        recurse: true
+        file_type: file
+      register: flux_interne
+      failed_when: false
+
+    - name: "6.4 - Check Matrice de Flux WAN"
+      find:
+        paths: "{{ deliverables_path }}/{{ client_name }}"
+        patterns: "*matrice*flux*wan*,*flux_wan*"
+        recurse: true
+        file_type: file
+      register: flux_wan
+      failed_when: false
+
+    - name: "6.5 - Check SPEC LB"
+      find:
+        paths: "{{ deliverables_path }}/{{ client_name }}"
+        patterns: "*SPEC*LB*,*spec_lb*"
+        recurse: true
+        file_type: file
+      register: spec_lb
+      failed_when: false
+
+    - name: "6.6 - Check Consignes Maia documentation"
+      find:
+        paths: "{{ deliverables_path }}/{{ client_name }}"
+        patterns: "*consigne*maia*,*maia*doc*"
+        recurse: true
+        file_type: file
+      register: consignes_maia
+      failed_when: false
+
+    - name: "6.7 - Check Cahier d'Exploitation"
+      find:
+        paths: "{{ deliverables_path }}/{{ client_name }}"
+        patterns: "*cahier*exploitation*,*exploitation*"
+        recurse: true
+        file_type: file
+      register: cahier_exploit
+      failed_when: false
+
+    - name: Build JSON result
+      set_fact:
+        section_result:
+          section: 6
+          name: "LIVRABLES"
+          client: "{{ client_name }}"
+          timestamp: "{{ ansible_date_time.iso8601 }}"
+          items:
+            - id: "6.1"
+              name: "Document d'Architecture Technique (DAT)"
+              status: "{{ 'done' if (dat_doc.matched | default(0)) > 0 else 'not_started' }}"
+              detail: "{{ dat_doc.matched | default(0) }} DAT documents found"
+            - id: "6.2"
+              name: "Spécifications Techniques"
+              status: "{{ 'done' if (spec_doc.matched | default(0)) > 0 else 'not_started' }}"
+              detail: "{{ spec_doc.matched | default(0) }} spec documents found"
+            - id: "6.3"
+              name: "Matrice de Flux Interne"
+              status: "{{ 'done' if (flux_interne.matched | default(0)) > 0 else 'not_started' }}"
+              detail: "{{ flux_interne.matched | default(0) }} flux interne docs found"
+            - id: "6.4"
+              name: "Matrice de Flux WAN"
+              status: "{{ 'done' if (flux_wan.matched | default(0)) > 0 else 'not_started' }}"
+              detail: "{{ flux_wan.matched | default(0) }} flux WAN docs found"
+            - id: "6.5"
+              name: "SPEC LB"
+              status: "{{ 'done' if (spec_lb.matched | default(0)) > 0 else 'not_started' }}"
+              detail: "{{ spec_lb.matched | default(0) }} SPEC LB docs found"
+            - id: "6.6"
+              name: "Consignes Maia"
+              status: "{{ 'done' if (consignes_maia.matched | default(0)) > 0 else 'not_started' }}"
+              detail: "{{ consignes_maia.matched | default(0) }} Maia docs found"
+            - id: "6.7"
+              name: "Cahier d'Exploitation"
+              status: "{{ 'done' if (cahier_exploit.matched | default(0)) > 0 else 'not_started' }}"
+              detail: "{{ cahier_exploit.matched | default(0) }} exploitation docs found"
+
+    - name: Output JSON result
+      debug:
+        msg: "{{ section_result | to_json }}"

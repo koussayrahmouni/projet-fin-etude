@@ -1,0 +1,106 @@
+---
+- name: "Section 4 - Verify Environnement Applicatif"
+  hosts: app_servers
+  become: true
+  gather_facts: true
+  vars:
+    client_name: "{{ client_name | default('default') }}"
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: "4.1 - Check Xmx values for all services"
+      shell: |
+        results='[]'
+        {% for svc in app_services %}
+        xmx=$(ps aux | grep '{{ svc.name }}' | grep -oP 'Xmx\K[0-9]+[GgMm]' | head -1)
+        if [ -n "$xmx" ]; then
+          results=$(echo "$results" | python3 -c "import sys,json; d=json.load(sys.stdin); d.append({'service':'{{ svc.name }}','expected':'{{ svc.xmx }}','actual':\"$xmx\"}); print(json.dumps(d))")
+        fi
+        {% endfor %}
+        echo "$results"
+      register: xmx_check
+      changed_when: false
+      failed_when: false
+
+    - name: "4.2 - Check fixed ports for all services"
+      shell: |
+        results='[]'
+        {% for svc in app_services %}
+        port_in_use=$(ss -tlnp | grep -c ':{{ svc.port }}' || echo 0)
+        results=$(echo "$results" | python3 -c "import sys,json; d=json.load(sys.stdin); d.append({'service':'{{ svc.name }}','port':{{ svc.port }},'listening':$port_in_use > 0}); print(json.dumps(d))")
+        {% endfor %}
+        echo "$results"
+      register: ports_check
+      changed_when: false
+      failed_when: false
+
+    - name: "4.3 - Check Tomcat version"
+      shell: |
+        catalina_path=$(find /opt -path '*/bin/catalina.sh' 2>/dev/null | head -1)
+        if [ -n "$catalina_path" ]; then
+          $catalina_path version 2>/dev/null | grep 'Server number' | awk '{print $NF}'
+        else
+          echo "not_found"
+        fi
+      register: tomcat_version
+      changed_when: false
+      failed_when: false
+
+    - name: "4.4 - Check Java version"
+      shell: "java -version 2>&1 | head -1 | grep -oP '\"\\K[^\"]+'"
+      register: java_version
+      changed_when: false
+      failed_when: false
+
+    - name: "4.5 - Check SSH key to APPV55"
+      shell: |
+        ssh-keygen -F {{ appv55_host }} 2>/dev/null | wc -l
+      register: ssh_appv55
+      changed_when: false
+      failed_when: false
+
+    - name: "4.6 - Check Tunisian access authorized"
+      shell: |
+        grep -c 'AllowUsers.*tn_' /etc/ssh/sshd_config 2>/dev/null || \
+        grep -c 'tn_' /etc/security/access.conf 2>/dev/null || echo 0
+      register: tn_access
+      changed_when: false
+      failed_when: false
+
+    - name: Build JSON result
+      set_fact:
+        section_result:
+          section: 4
+          name: "ENVIRONNEMENT APPLICATIF"
+          client: "{{ client_name }}"
+          timestamp: "{{ ansible_date_time.iso8601 }}"
+          items:
+            - id: "4.1"
+              name: "Valeurs Xmx des services"
+              status: "{{ 'done' if xmx_check.stdout != '[]' else 'not_started' }}"
+              detail: "{{ xmx_check.stdout | truncate(200) }}"
+            - id: "4.2"
+              name: "Ports bien fixés"
+              status: "{{ 'done' if ports_check.stdout != '[]' else 'not_started' }}"
+              detail: "{{ ports_check.stdout | truncate(200) }}"
+            - id: "4.3"
+              name: "Tomcat en dernière version"
+              status: "{{ 'done' if tomcat_version.stdout != 'not_found' else 'not_started' }}"
+              detail: "Tomcat version: {{ tomcat_version.stdout }}"
+            - id: "4.4"
+              name: "Java en dernière version"
+              status: "{{ 'done' if java_version.stdout is defined else 'not_started' }}"
+              detail: "Java version: {{ java_version.stdout | default('not found') }}"
+            - id: "4.5"
+              name: "Clé SSH vers APPV55"
+              status: "{{ 'done' if (ssh_appv55.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ ssh_appv55.stdout }} known_hosts entries for APPV55"
+            - id: "4.6"
+              name: "Accès tunisiens autorisé"
+              status: "{{ 'done' if (tn_access.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ tn_access.stdout }} access rules found"
+
+    - name: Output JSON result
+      debug:
+        msg: "{{ section_result | to_json }}"

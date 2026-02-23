@@ -1,0 +1,153 @@
+---
+- name: "Section 2 - Verify Dollar Universe Setup"
+  hosts: app_servers
+  become: true
+  gather_facts: true
+  vars:
+    client_name: "{{ client_name | default('default') }}"
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: "2.1 - Check Dollar Universe installation"
+      stat:
+        path: "{{ du_install_path }}"
+      register: du_installed
+
+    - name: "2.1 - Check cluster mode"
+      shell: "uxlst -host 2>/dev/null | grep -c cluster || echo 0"
+      register: du_cluster
+      changed_when: false
+      failed_when: false
+
+    - name: "2.2 - Check environment accounts exist"
+      shell: "getent passwd | grep -E '(prd|hprd|pprd|dev)_{{ client_name | lower }}' | wc -l"
+      register: env_accounts
+      changed_when: false
+      failed_when: false
+
+    - name: "2.3 - Check dedicated /admin directory"
+      stat:
+        path: "{{ du_admin_path }}/{{ client_name }}"
+      register: admin_dir
+
+    - name: "2.4 - Check $U log backup (Consigne MAIA 677)"
+      find:
+        paths: "{{ du_log_backup_path }}"
+        patterns: "*.log"
+        age: "-7d"
+      register: du_logs
+
+    - name: "2.5 - Check dsnval upgrade uprocs exist"
+      shell: "find {{ du_install_path }}/uprocs -name '*dsnval*' 2>/dev/null | wc -l"
+      register: dsnval_uprocs
+      changed_when: false
+      failed_when: false
+
+    - name: "2.6 - Check GO automatique mechanism (Consigne MAIA 770)"
+      shell: "crontab -l 2>/dev/null | grep -c 'go_auto' || echo 0"
+      register: go_auto
+      changed_when: false
+      failed_when: false
+
+    - name: "2.7 - Check /admin cleanup (only useful files)"
+      shell: "find {{ du_admin_path }} -type f -mtime +365 2>/dev/null | wc -l"
+      register: admin_old_files
+      changed_when: false
+      failed_when: false
+
+    - name: "2.8 - Check automatic comments setup"
+      shell: "grep -r 'commentaire_auto' {{ du_install_path }}/conf/ 2>/dev/null | wc -l"
+      register: auto_comments
+      changed_when: false
+      failed_when: false
+
+    - name: "2.9 - Check daily stop/start/clean cron"
+      shell: "crontab -l 2>/dev/null | grep -cE '(stop_clean|start_daily)' || echo 0"
+      register: daily_cron
+      changed_when: false
+      failed_when: false
+
+    - name: "2.10 - Check sync of function scripts between hprod and prod"
+      shell: |
+        if [ -f /home/admjenkins/function_sql_Slice.sh ] && [ -f /home/admjenkins/function.sh ]; then
+          echo "present"
+        else
+          echo "missing"
+        fi
+      register: function_scripts
+      changed_when: false
+      failed_when: false
+
+    - name: "2.11 - Check $U object sync between PROD and HORS PROD"
+      shell: "uxlst -sync 2>/dev/null || echo 'sync_check_unavailable'"
+      register: du_sync
+      changed_when: false
+      failed_when: false
+
+    - name: "2.12 - Check for known false KO patterns"
+      shell: "grep -r 'FAUX_KO\\|FALSE_KO\\|false_ko' {{ du_install_path }}/conf/ 2>/dev/null | wc -l"
+      register: false_ko
+      changed_when: false
+      failed_when: false
+
+    - name: Build JSON result
+      set_fact:
+        section_result:
+          section: 2
+          name: "DOLLAR UNIVERSE"
+          client: "{{ client_name }}"
+          timestamp: "{{ ansible_date_time.iso8601 }}"
+          items:
+            - id: "2.1"
+              name: "Installation Dollar Universe"
+              status: "{{ 'done' if du_installed.stat.exists else 'not_started' }}"
+              detail: "Path {{ du_install_path }} {{ 'exists' if du_installed.stat.exists else 'NOT FOUND' }}"
+            - id: "2.2"
+              name: "Création des comptes environnements"
+              status: "{{ 'done' if (env_accounts.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ env_accounts.stdout }} environment accounts found"
+            - id: "2.3"
+              name: "Utilisation d'un /admin dédié"
+              status: "{{ 'done' if admin_dir.stat.exists | default(false) else 'not_started' }}"
+              detail: "Admin dir {{ 'exists' if admin_dir.stat.exists | default(false) else 'NOT FOUND' }}"
+            - id: "2.4"
+              name: "Sauvegarde des logs $U"
+              status: "{{ 'done' if (du_logs.matched | default(0)) > 0 else 'not_started' }}"
+              detail: "{{ du_logs.matched | default(0) }} recent log files found"
+            - id: "2.5"
+              name: "Création uprocs upgrade dsnval"
+              status: "{{ 'done' if (dsnval_uprocs.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ dsnval_uprocs.stdout }} dsnval uprocs found"
+            - id: "2.6"
+              name: "Mécanisme GO automatique"
+              status: "{{ 'done' if (go_auto.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ go_auto.stdout }} GO auto cron entries"
+            - id: "2.7"
+              name: "Ménage /admin dédié"
+              status: "{{ 'done' if (admin_old_files.stdout | int) == 0 else 'in_progress' }}"
+              detail: "{{ admin_old_files.stdout }} files older than 1 year"
+            - id: "2.8"
+              name: "Commentaires automatiques"
+              status: "{{ 'done' if (auto_comments.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ auto_comments.stdout }} auto comment configs found"
+            - id: "2.9"
+              name: "Stop/start + clean quotidien"
+              status: "{{ 'done' if (daily_cron.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ daily_cron.stdout }} daily cron entries"
+            - id: "2.10"
+              name: "Sync function scripts hprod/prod"
+              status: "{{ 'done' if function_scripts.stdout == 'present' else 'not_started' }}"
+              detail: "Scripts {{ function_scripts.stdout }}"
+            - id: "2.11"
+              name: "Sync objets $U PROD/HORS PROD"
+              status: "{{ 'done' if 'sync_check_unavailable' not in du_sync.stdout else 'not_started' }}"
+              detail: "{{ du_sync.stdout | truncate(100) }}"
+            - id: "2.12"
+              name: "Gestion des faux KO"
+              status: "{{ 'done' if (false_ko.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ false_ko.stdout }} false KO configs found"
+
+    - name: Output JSON result
+      debug:
+        msg: "{{ section_result | to_json }}"

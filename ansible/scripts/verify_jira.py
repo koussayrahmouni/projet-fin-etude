@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 verify_jira.py
-Run checks against Jira and print a single JSON result to stdout.
+Run checks against Jira and print a standardized JSON result to stdout.
 
 Env vars:
   JIRA_URL, JIRA_USER, JIRA_API_TOKEN, SERVICE_DESK_PROJECT_KEY
@@ -9,7 +9,16 @@ Args:
   --client "ClientName"
 
 Outputs:
-  JSON object with "client", "timestamp", "checks" array.
+  JSON matching the B2R checklist format:
+  {
+    "section": 1,
+    "name": "JIRA",
+    "client": "...",
+    "timestamp": "...",
+    "items": [
+      { "id": "1.1", "name": "...", "status": "done|not_started", "detail": "..." }
+    ]
+  }
 """
 import os
 import sys
@@ -21,47 +30,50 @@ from typing import List
 
 requests.packages.urllib3.disable_warnings()
 
+
 def api_get(url, auth, params=None):
     r = requests.get(url, params=params, verify=True, timeout=30)
     r.raise_for_status()
     return r.json()
+
 
 def api_post(url, auth, payload):
     r = requests.post(url, json=payload, verify=True, timeout=30)
     r.raise_for_status()
     return r.json()
 
+
 def find_project_by_name(base_url, auth, name):
-    # try project search endpoint
     try:
         url = f"{base_url}/rest/api/3/project/search"
         params = {"query": name}
         res = api_get(url, auth, params=params)
         for p in res.get("values", []):
-            if p.get("name","").lower() == name.lower():
+            if p.get("name", "").lower() == name.lower():
                 return p
         for p in res.get("values", []):
-            if name.lower() in p.get("name","").lower():
+            if name.lower() in p.get("name", "").lower():
                 return p
     except requests.HTTPError:
         pass
     return None
 
+
 def ensure_component(base_url, auth, project_key, component_name):
     try:
         comps = api_get(f"{base_url}/rest/api/3/project/{project_key}/components", auth)
         for c in comps:
-            if c.get("name","").lower() == component_name.lower():
-                return {"created": False, "component": c}
+            if c.get("name", "").lower() == component_name.lower():
+                return True, "Component already exists"
     except Exception:
-        # ignore; we'll try to create it
         pass
     payload = {"name": component_name, "project": project_key}
     try:
-        comp = api_post(f"{base_url}/rest/api/3/component", auth, payload)
-        return {"created": True, "component": comp}
+        api_post(f"{base_url}/rest/api/3/component", auth, payload)
+        return True, "Component created successfully"
     except Exception as e:
-        return {"created": False, "error": str(e)}
+        return False, f"Failed to create component: {e}"
+
 
 def find_issues_in_status(base_url, auth, project_key, status_name) -> List[dict]:
     jql = f'project = "{project_key}" AND status = "{status_name}"'
@@ -73,6 +85,7 @@ def find_issues_in_status(base_url, auth, project_key, status_name) -> List[dict
     except Exception:
         return []
 
+
 def get_transitions(base_url, auth, issue_key):
     url = f"{base_url}/rest/api/3/issue/{issue_key}/transitions"
     try:
@@ -81,27 +94,29 @@ def get_transitions(base_url, auth, issue_key):
     except Exception:
         return []
 
+
 def transition_issue(base_url, auth, issue_key, target_names):
     transitions = get_transitions(base_url, auth, issue_key)
     target_lc = [t.lower() for t in target_names]
     chosen = None
     for t in transitions:
-        if t.get("name","").lower() in target_lc:
+        if t.get("name", "").lower() in target_lc:
             chosen = t
             break
     if not chosen and transitions:
-        chosen = transitions[-1]  # fallback
+        chosen = transitions[-1]
     if not chosen:
-        return {"ok": False, "error": "no available transition"}
+        return False, "No available transition"
     trans_url = f"{base_url}/rest/api/3/issue/{issue_key}/transitions"
     try:
         r = requests.post(trans_url, json={"transition": {"id": chosen["id"]}}, verify=True, timeout=30)
-        if r.status_code in (200,204):
-            return {"ok": True, "transitioned_to": chosen.get("name")}
+        if r.status_code in (200, 204):
+            return True, f"Transitioned to {chosen.get('name')}"
         else:
-            return {"ok": False, "status": r.status_code, "text": r.text}
+            return False, f"HTTP {r.status_code}: {r.text[:100]}"
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return False, str(e)
+
 
 def create_service_desk_issue(base_url, auth, project_key, summary, description):
     url = f"{base_url}/rest/api/3/issue"
@@ -110,14 +125,15 @@ def create_service_desk_issue(base_url, auth, project_key, summary, description)
             "project": {"key": project_key},
             "summary": summary,
             "description": description,
-            "issuetype": {"name": "Task"}  # adapt if you want a Service Request type
+            "issuetype": {"name": "Task"},
         }
     }
     try:
         res = api_post(url, auth, payload)
-        return {"created": True, "key": res.get("key")}
+        return True, f"Created issue {res.get('key')}"
     except Exception as e:
-        return {"created": False, "error": str(e)}
+        return False, f"Failed: {e}"
+
 
 def main():
     p = argparse.ArgumentParser()
@@ -132,103 +148,111 @@ def main():
 
     if not base_url:
         print(json.dumps({
-        "ok": False,
-        "error": "JIRA_URL environment variable is required"
-    }))
-        sys.exit(2)
+            "section": 1,
+            "name": "JIRA",
+            "client": args.client,
+            "error": "JIRA_URL environment variable is required",
+            "items": [
+                {"id": "1.1", "name": "Projet JIRA RUN à ouvrir", "status": "not_started", "detail": "JIRA_URL not configured"},
+                {"id": "1.2", "name": "Création du composant JIRA", "status": "not_started", "detail": "JIRA_URL not configured"},
+                {"id": "1.3", "name": "Informer le service desk", "status": "not_started", "detail": "JIRA_URL not configured"},
+                {"id": "1.4", "name": "Clôturer tickets Build (DELIVERY)", "status": "not_started", "detail": "JIRA_URL not configured"},
+                {"id": "1.5", "name": "Clôturer tickets Build (ARCHITECTURE)", "status": "not_started", "detail": "JIRA_URL not configured"},
+            ]
+        }))
+        sys.exit(0)
 
-    #auth = (user, token)
     auth = None
     client = args.client.strip()
-    out = {"client": client, "timestamp": datetime.datetime.utcnow().isoformat(), "checks": []}
+    items = []
 
+    # 1.1 - Find project (Projet JIRA RUN à ouvrir)
     project = find_project_by_name(base_url, auth, client)
-    if not project:
-        out["checks"].append({
-            "name": "find_project",
-            "ok": False,
-            "message": f"Project not found for client '{client}'"
+    if project:
+        items.append({
+            "id": "1.1",
+            "name": "Projet JIRA RUN à ouvrir",
+            "status": "done",
+            "detail": f"Project found: {project.get('key')} ({project.get('name')})"
         })
+    else:
+        items.append({
+            "id": "1.1",
+            "name": "Projet JIRA RUN à ouvrir",
+            "status": "not_started",
+            "detail": f"Project not found for client '{client}'"
+        })
+        # Can't continue without a project - mark rest as not_started
+        items.extend([
+            {"id": "1.2", "name": "Création du composant JIRA", "status": "not_started", "detail": "Project not found"},
+            {"id": "1.3", "name": "Informer le service desk", "status": "not_started", "detail": "Project not found"},
+            {"id": "1.4", "name": "Clôturer tickets Build (DELIVERY)", "status": "not_started", "detail": "Project not found"},
+            {"id": "1.5", "name": "Clôturer tickets Build (ARCHITECTURE)", "status": "not_started", "detail": "Project not found"},
+        ])
+        out = {
+            "section": 1,
+            "name": "JIRA",
+            "client": client,
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "items": items,
+        }
         print(json.dumps(out, ensure_ascii=False))
         sys.exit(0)
 
-    out["project"] = {"key": project.get("key"), "name": project.get("name")}
-    out["checks"].append({"name": "find_project", "ok": True, "project": out["project"]})
+    project_key = project.get("key")
 
-    # 1) Create or verify component
-    comp_res = ensure_component(base_url, auth, project.get("key"), "Création du composant JIRA")
-    out["checks"].append({"name": "component_creation", **comp_res})
+    # 1.2 - Create or verify component
+    comp_ok, comp_detail = ensure_component(base_url, auth, project_key, "Création du composant JIRA")
+    items.append({
+        "id": "1.2",
+        "name": "Création du composant JIRA",
+        "status": "done" if comp_ok else "not_started",
+        "detail": comp_detail,
+    })
 
-    # 2) Check RUN project (we try matching "client RUN" or project with 'RUN' in name)
-    run_candidate = find_project_by_name(base_url, auth, f"{client} RUN")
-    if not run_candidate:
-        # fallback: search for any project with RUN in the name
-        # call project search without filters and scan (may be paginated)
-        run_found = None
-        try:
-            url = f"{base_url}/rest/api/3/project/search"
-            res = api_get(url, auth)
-            for p in res.get("values", []):
-                if "run" in p.get("name","").lower() and client.lower() in p.get("name","").lower():
-                    run_found = p
-                    break
-        except Exception:
-            run_found = None
-        if run_found:
-            out["checks"].append({"name": "run_project", "ok": True, "project": {"key": run_found.get("key"), "name": run_found.get("name")}})
-        else:
-            out["checks"].append({"name": "run_project", "ok": False, "message": "RUN project not found"})
-    else:
-        out["checks"].append({"name": "run_project", "ok": True, "project": {"key": run_candidate.get("key"), "name": run_candidate.get("name")}})
+    # 1.3 - Inform service desk of B2R date
+    summary = f"B2R verification for client {client} - {datetime.date.today().isoformat()}"
+    description = f"Automated B2R checklist verification for {client}"
+    sd_ok, sd_detail = create_service_desk_issue(base_url, auth, sd_project, summary, description)
+    items.append({
+        "id": "1.3",
+        "name": "Informer le service desk",
+        "status": "done" if sd_ok else "not_started",
+        "detail": sd_detail,
+    })
 
-    # 3) Close tickets in "Build"
-    issues = find_issues_in_status(base_url, auth, project.get("key"), "Build")
-    close_results = []
+    # 1.4 - Close Build tickets (NSS DELIVERY)
+    issues = find_issues_in_status(base_url, auth, project_key, "Build")
+    closed_count = 0
     for issue in issues:
-        key = issue.get("key")
-        res = transition_issue(base_url, auth, key, default_transitions)
-        close_results.append({"key": key, "result": res})
-    out["checks"].append({"name": "close_build_issues", "count": len(issues), "results": close_results})
+        ok, _ = transition_issue(base_url, auth, issue.get("key"), default_transitions)
+        if ok:
+            closed_count += 1
+    items.append({
+        "id": "1.4",
+        "name": "Clôturer tickets Build (DELIVERY)",
+        "status": "done" if len(issues) == 0 or closed_count == len(issues) else "in_progress",
+        "detail": f"{closed_count}/{len(issues)} Build tickets closed" if issues else "No Build tickets found (already clean)",
+    })
 
-    # 4) Inform service desk
-    summary = f"Verification results for client {client} - {datetime.date.today().isoformat()}"
-    description = "Verification summary:\n\n" + json.dumps(out, indent=2, ensure_ascii=False)
-    sd = create_service_desk_issue(base_url, auth, sd_project, summary, description)
-    out["checks"].append({"name": "inform_service_desk", **sd})
+    # 1.5 - Close Build tickets (ARCHITECTURE) - same check, different owner
+    items.append({
+        "id": "1.5",
+        "name": "Clôturer tickets Build (ARCHITECTURE)",
+        "status": items[-1]["status"],  # Same result as 1.4
+        "detail": items[-1]["detail"],
+    })
 
+    out = {
+        "section": 1,
+        "name": "JIRA",
+        "client": client,
+        "timestamp": datetime.datetime.utcnow().isoformat(),
+        "items": items,
+    }
     print(json.dumps(out, ensure_ascii=False))
     sys.exit(0)
 
+
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

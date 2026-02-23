@@ -1,0 +1,149 @@
+---
+- name: "Section 5 - Verify Monitoring Setup"
+  hosts: app_servers
+  become: true
+  gather_facts: true
+  vars:
+    client_name: "{{ client_name | default('default') }}"
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: "5.1 - Check MAIA server configuration"
+      uri:
+        url: "{{ maia_url }}/api/servers?client={{ client_name }}"
+        method: GET
+        status_code: [200, 401, 403, 404]
+        timeout: 10
+      register: maia_servers
+      failed_when: false
+
+    - name: "5.2 - Check MAIA HRA services"
+      uri:
+        url: "{{ maia_url }}/api/services?client={{ client_name }}&type=HRA"
+        method: GET
+        status_code: [200, 401, 403, 404]
+        timeout: 10
+      register: maia_hra
+      failed_when: false
+
+    - name: "5.3 - Check MAIA URL monitoring"
+      uri:
+        url: "{{ maia_url }}/api/urls?client={{ client_name }}"
+        method: GET
+        status_code: [200, 401, 403, 404]
+        timeout: 10
+      register: maia_urls
+      failed_when: false
+
+    - name: "5.4 - Check Job Manager / PS Monitor service"
+      service_facts:
+
+    - name: "5.4 - Evaluate job manager status"
+      set_fact:
+        job_manager_running: "{{ 'ps_monitor' in ansible_facts.services or 'maia-supervisor' in ansible_facts.services }}"
+
+    - name: "5.5 - Check zo-monitor configuration"
+      stat:
+        path: "/opt/zo-monitor/conf/jdbc.properties"
+      register: zo_monitor_conf
+
+    - name: "5.5 - Validate zo-monitor jdbc config"
+      shell: "grep -c 'jdbc.url' /opt/zo-monitor/conf/jdbc.properties 2>/dev/null || echo 0"
+      register: zo_monitor_jdbc
+      changed_when: false
+      failed_when: false
+
+    - name: "5.6 - Check Zabbix agent installed and running"
+      shell: "systemctl is-active zabbix-agent2 2>/dev/null || systemctl is-active zabbix-agent 2>/dev/null || echo inactive"
+      register: zabbix_agent
+      changed_when: false
+      failed_when: false
+
+    - name: "5.6 - Check host registered in Zabbix"
+      uri:
+        url: "{{ zabbix_url }}/api_jsonrpc.php"
+        method: POST
+        body_format: json
+        body:
+          jsonrpc: "2.0"
+          method: "host.get"
+          params:
+            filter:
+              host: "{{ ansible_hostname }}"
+          auth: "{{ zabbix_auth_token | default('') }}"
+          id: 1
+        status_code: [200, 401, 403]
+        timeout: 10
+      register: zabbix_host
+      failed_when: false
+
+    - name: "5.7 - Check Khronos performance indicators"
+      shell: |
+        find /opt/khronos -name "*.conf" -path "*{{ client_name | lower }}*" 2>/dev/null | wc -l
+      register: khronos_conf
+      changed_when: false
+      failed_when: false
+
+    - name: "5.8 - Check payroll tracking ticket setup"
+      shell: |
+        grep -r 'suivi_paie' /etc/maia/conf.d/ 2>/dev/null | grep -ci '{{ client_name | lower }}' || echo 0
+      register: payroll_tracking
+      changed_when: false
+      failed_when: false
+
+    - name: "5.9 - Check aliases configured and active"
+      shell: |
+        grep -c 'alias' /home/*/.bashrc 2>/dev/null | grep -v ':0$' | wc -l
+      register: aliases_configured
+      changed_when: false
+      failed_when: false
+
+    - name: Build JSON result
+      set_fact:
+        section_result:
+          section: 5
+          name: "MONITORING"
+          client: "{{ client_name }}"
+          timestamp: "{{ ansible_date_time.iso8601 }}"
+          items:
+            - id: "5.1"
+              name: "Serveurs configurés sur MAIA"
+              status: "{{ 'done' if maia_servers.status | default(0) == 200 else 'not_started' }}"
+              detail: "MAIA server check: HTTP {{ maia_servers.status | default('unreachable') }}"
+            - id: "5.2"
+              name: "Services HRA sur MAIA"
+              status: "{{ 'done' if maia_hra.status | default(0) == 200 else 'not_started' }}"
+              detail: "MAIA HRA check: HTTP {{ maia_hra.status | default('unreachable') }}"
+            - id: "5.3"
+              name: "URLs configurées sur MAIA"
+              status: "{{ 'done' if maia_urls.status | default(0) == 200 else 'not_started' }}"
+              detail: "MAIA URL check: HTTP {{ maia_urls.status | default('unreachable') }}"
+            - id: "5.4"
+              name: "Job Manager activé"
+              status: "{{ 'done' if job_manager_running else 'not_started' }}"
+              detail: "PS Monitor / Maia supervisor: {{ job_manager_running }}"
+            - id: "5.5"
+              name: "zo-monitor activé"
+              status: "{{ 'done' if zo_monitor_conf.stat.exists | default(false) and (zo_monitor_jdbc.stdout | int) > 0 else 'not_started' }}"
+              detail: "Config exists={{ zo_monitor_conf.stat.exists | default(false) }}, jdbc entries={{ zo_monitor_jdbc.stdout }}"
+            - id: "5.6"
+              name: "Zabbix configuré"
+              status: "{{ 'done' if zabbix_agent.stdout == 'active' else 'not_started' }}"
+              detail: "Zabbix agent: {{ zabbix_agent.stdout }}"
+            - id: "5.7"
+              name: "Indicateurs Khronos"
+              status: "{{ 'done' if (khronos_conf.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ khronos_conf.stdout }} Khronos configs found"
+            - id: "5.8"
+              name: "Ticket suivi de paie"
+              status: "{{ 'done' if (payroll_tracking.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ payroll_tracking.stdout }} tracking configs"
+            - id: "5.9"
+              name: "Aliases configurés et activés"
+              status: "{{ 'done' if (aliases_configured.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ aliases_configured.stdout }} users with aliases"
+
+    - name: Output JSON result
+      debug:
+        msg: "{{ section_result | to_json }}"

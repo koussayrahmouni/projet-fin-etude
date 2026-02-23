@@ -1,2 +1,16 @@
 [local]
 localhost ansible_connection=local
+
+[app_servers]
+# Add your application servers here
+# app-prod-01 ansible_host=10.7.157.105 ansible_user=koussay
+# app-hprod-01 ansible_host=10.7.157.106 ansible_user=koussay
+
+[db_servers]
+# db-prod-01 ansible_host=10.7.157.110 ansible_user=koussay
+
+[monitoring_servers]
+# monitoring-01 ansible_host=10.7.157.105 ansible_user=koussay
+
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3

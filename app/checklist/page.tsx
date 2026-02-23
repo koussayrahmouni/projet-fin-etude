@@ -392,9 +392,93 @@ export default function ChecklistPage() {
       .filter((section) => section.items.length > 0 || section.name.toLowerCase().includes(lower));
   }, [data, searchTerm]);
 
-  // ─── Ansible placeholder ────────────────────────────────────────────────
-  function handleAnsibleCheck(sectionNumber: number, sectionName: string) {
-    alert(`Ansible check for section ${sectionNumber} (${sectionName}) will be available soon.\n\nThis will run automated verification playbooks for the items in this section.`);
+  // ─── Ansible / AWX integration ──────────────────────────────────────────
+  const [ansibleRunning, setAnsibleRunning] = useState<Record<number, boolean>>({});
+  const [ansibleJobIds, setAnsibleJobIds] = useState<Record<number, number>>({});
+
+  async function handleAnsibleCheck(sectionNumber: number, sectionName: string) {
+    if (!clientName.trim()) {
+      alert("Please enter a client name first.");
+      return;
+    }
+    if (ansibleRunning[sectionNumber]) return;
+
+    setAnsibleRunning((prev) => ({ ...prev, [sectionNumber]: true }));
+
+    try {
+      // Launch the AWX job
+      const launchRes = await fetch("/api/checklist/ansible-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section: sectionNumber, clientName: clientName.trim() }),
+      });
+
+      const launchData = await launchRes.json();
+
+      if (!launchRes.ok) {
+        if (launchData.setup_required) {
+          alert(`AWX Setup Required:\n\n${launchData.error}\n\nSee ansible/README.md for setup instructions.`);
+        } else {
+          alert(`AWX Error: ${launchData.error}`);
+        }
+        setAnsibleRunning((prev) => ({ ...prev, [sectionNumber]: false }));
+        return;
+      }
+
+      setAnsibleJobIds((prev) => ({ ...prev, [sectionNumber]: launchData.jobId }));
+
+      // Poll for job completion
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`/api/checklist/ansible-check?jobId=${launchData.jobId}`);
+          const statusData = await statusRes.json();
+
+          if (statusData.status === "successful" || statusData.status === "failed") {
+            clearInterval(pollInterval);
+            setAnsibleRunning((prev) => ({ ...prev, [sectionNumber]: false }));
+
+            if (statusData.items && data) {
+              // Update checklist items with Ansible results
+              const updatedData = { ...data };
+              const section = updatedData.sections.find((s: ChecklistSection) => s.number === sectionNumber);
+              if (section) {
+                for (const ansibleItem of statusData.items) {
+                  const item = section.items.find((i: ChecklistItem) => i.id === ansibleItem.id);
+                  if (item) {
+                    item.status = ansibleItem.status as ChecklistItem["status"];
+                    if (ansibleItem.detail) {
+                      item.comment = `[Ansible] ${ansibleItem.detail}`;
+                    }
+                  }
+                }
+                setData(updatedData);
+              }
+              alert(`Section ${sectionNumber} (${sectionName}) verification complete!\n\nResults have been applied to the checklist.`);
+            } else if (statusData.status === "failed") {
+              alert(`Ansible verification for section ${sectionNumber} failed.\n\nCheck AWX job #${launchData.jobId} for details.`);
+            }
+          } else if (statusData.status === "error" || statusData.status === "canceled") {
+            clearInterval(pollInterval);
+            setAnsibleRunning((prev) => ({ ...prev, [sectionNumber]: false }));
+            alert(`Job ${statusData.status} for section ${sectionNumber}.`);
+          }
+        } catch {
+          clearInterval(pollInterval);
+          setAnsibleRunning((prev) => ({ ...prev, [sectionNumber]: false }));
+        }
+      }, 3000); // Poll every 3 seconds
+
+      // Safety timeout: stop polling after 5 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        setAnsibleRunning((prev) => ({ ...prev, [sectionNumber]: false }));
+      }, 300000);
+
+    } catch (err) {
+      console.error("Ansible check error:", err);
+      alert("Failed to connect to AWX. Make sure AWX is running and accessible.");
+      setAnsibleRunning((prev) => ({ ...prev, [sectionNumber]: false }));
+    }
   }
 
   // ─── Excel export (PDF-matching design with ExcelJS) ─────────────────────
@@ -993,13 +1077,24 @@ export default function ChecklistPage() {
                             e.stopPropagation();
                             handleAnsibleCheck(section.number, section.name);
                           }}
-                          className="mr-4 px-3 py-1.5 flex items-center gap-1.5 bg-orange-50 border border-orange-200 text-orange-700 rounded-lg text-xs font-medium hover:bg-orange-100 hover:border-orange-300 transition-colors shrink-0"
-                          title={`Run Ansible check for ${section.name}`}
+                          disabled={ansibleRunning[section.number]}
+                          className={`mr-4 px-3 py-1.5 flex items-center gap-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
+                            ansibleRunning[section.number]
+                              ? "bg-orange-100 border border-orange-300 text-orange-500 cursor-wait"
+                              : "bg-orange-50 border border-orange-200 text-orange-700 hover:bg-orange-100 hover:border-orange-300"
+                          }`}
+                          title={ansibleRunning[section.number] ? `Running Ansible check for ${section.name}...` : `Run Ansible check for ${section.name}`}
                         >
-                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
-                          </svg>
-                          Ansible
+                          {ansibleRunning[section.number] ? (
+                            <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                            </svg>
+                          ) : (
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
+                            </svg>
+                          )}
+                          {ansibleRunning[section.number] ? "Running..." : "Ansible"}
                         </button>
                       </div>
 

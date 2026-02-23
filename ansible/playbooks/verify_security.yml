@@ -1,0 +1,222 @@
+---
+- name: "Section 8 - Verify Security"
+  hosts: app_servers
+  become: true
+  gather_facts: true
+  vars:
+    client_name: "{{ client_name | default('default') }}"
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: "8.1 - Check Trend Micro agent"
+      shell: |
+        systemctl is-active {{ trend_micro_service }} 2>/dev/null || echo "inactive"
+      register: trend_agent
+      changed_when: false
+      failed_when: false
+
+    - name: "8.1 - Check Trend Micro is up to date"
+      shell: |
+        /opt/ds_agent/dsa_query -c GetAgentStatus 2>/dev/null | grep -i 'pattern' | head -1 || echo "unknown"
+      register: trend_update
+      changed_when: false
+      failed_when: false
+
+    - name: "8.2 - Check EDR agent (CrowdStrike/Carbon Black)"
+      shell: |
+        systemctl is-active {{ edr_service }} 2>/dev/null || \
+        systemctl is-active cbagentd 2>/dev/null || \
+        echo "inactive"
+      register: edr_agent
+      changed_when: false
+      failed_when: false
+
+    - name: "8.3 - Check security workshop documentation"
+      find:
+        paths: "{{ deliverables_path | default('/docs/livrables') }}/{{ client_name }}"
+        patterns: "*atelier*securite*,*security*workshop*"
+        recurse: true
+      register: security_workshop
+      failed_when: false
+
+    - name: "8.4 - Check SOC integration (syslog forwarding)"
+      shell: |
+        grep -rc 'soc\|siem\|@@.*514' /etc/rsyslog.conf /etc/rsyslog.d/ 2>/dev/null | grep -v ':0$' | wc -l
+      register: soc_integration
+      changed_when: false
+      failed_when: false
+
+    - name: "8.5 - Check MFA solution"
+      shell: |
+        grep -c 'pam_google_authenticator\|pam_duo\|pam_yubico\|ChallengeResponseAuthentication yes' /etc/pam.d/sshd /etc/ssh/sshd_config 2>/dev/null | grep -v ':0$' | wc -l
+      register: mfa_check
+      changed_when: false
+      failed_when: false
+
+    - name: "8.6 - Check pentest report exists"
+      find:
+        paths: "{{ deliverables_path | default('/docs/livrables') }}/{{ client_name }}"
+        patterns: "*pentest*,*penetration*test*"
+        recurse: true
+      register: pentest_report
+      failed_when: false
+
+    - name: "8.7 - Check remediation plan (P1 closed)"
+      find:
+        paths: "{{ deliverables_path | default('/docs/livrables') }}/{{ client_name }}"
+        patterns: "*remediation*,*remédiation*"
+        recurse: true
+      register: remediation_plan
+      failed_when: false
+
+    - name: "8.8 - Check second security workshop"
+      set_fact:
+        security_workshop_2: "{{ security_workshop }}"
+
+    - name: "8.9 - Check PCA delivered to client"
+      find:
+        paths: "{{ deliverables_path | default('/docs/livrables') }}/{{ client_name }}"
+        patterns: "*PCA*,*continuité*activité*"
+        recurse: true
+      register: pca_doc
+      failed_when: false
+
+    - name: "8.10 - Check PAS security delivered"
+      find:
+        paths: "{{ deliverables_path | default('/docs/livrables') }}/{{ client_name }}"
+        patterns: "*PAS*securite*,*plan*assurance*"
+        recurse: true
+      register: pas_doc
+      failed_when: false
+
+    - name: "8.11 - Review system and application accounts"
+      shell: |
+        # Check for accounts with no password expiry or never-expire flags
+        awk -F: '($2 == "" || $2 == "!") {print $1}' /etc/shadow 2>/dev/null | wc -l
+      register: account_review
+      changed_when: false
+      failed_when: false
+
+    - name: "8.12 - Check password policy enforcement"
+      shell: |
+        grep -cE 'minlen|dcredit|ucredit|lcredit|ocredit' /etc/security/pwquality.conf 2>/dev/null || \
+        grep -cE 'pam_pwquality\|pam_cracklib' /etc/pam.d/system-auth 2>/dev/null || echo 0
+      register: password_policy
+      changed_when: false
+      failed_when: false
+
+    - name: "8.13 - Check root access removed for SHRS"
+      shell: |
+        grep -c '{{ shrs_user }}' /etc/sudoers /etc/sudoers.d/* 2>/dev/null | grep -v ':0$' | wc -l
+      register: shrs_root
+      changed_when: false
+      failed_when: false
+
+    - name: "8.14 - Check Oracle default accounts disabled"
+      shell: |
+        if command -v sqlplus &>/dev/null; then
+          echo "SELECT username, account_status FROM dba_users WHERE username IN ('SCOTT','HR','OE','SH','DBSNMP');" | \
+          sqlplus -s / as sysdba 2>/dev/null | grep -c 'EXPIRED & LOCKED' || echo 0
+        else
+          echo "oracle_not_installed"
+        fi
+      register: oracle_accounts
+      changed_when: false
+      failed_when: false
+
+    - name: "8.15 - Check SSL/TLS certificates"
+      shell: |
+        # Check if certificates are valid and not expiring within 30 days
+        results=0
+        for cert in $(find /etc/ssl/certs /etc/pki/tls/certs -name '*.pem' -o -name '*.crt' 2>/dev/null | head -10); do
+          expiry=$(openssl x509 -enddate -noout -in "$cert" 2>/dev/null | cut -d= -f2)
+          if [ -n "$expiry" ]; then
+            expiry_epoch=$(date -d "$expiry" +%s 2>/dev/null)
+            now_epoch=$(date +%s)
+            days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
+            if [ "$days_left" -gt 30 ]; then
+              results=$((results + 1))
+            fi
+          fi
+        done
+        echo "$results"
+      register: cert_check
+      changed_when: false
+      failed_when: false
+
+    - name: Build JSON result
+      set_fact:
+        section_result:
+          section: 8
+          name: "SECURITY"
+          client: "{{ client_name }}"
+          timestamp: "{{ ansible_date_time.iso8601 }}"
+          items:
+            - id: "8.1"
+              name: "Agent Trend déployé et à jour"
+              status: "{{ 'done' if trend_agent.stdout == 'active' else 'not_started' }}"
+              detail: "Trend agent: {{ trend_agent.stdout }}, Update: {{ trend_update.stdout | truncate(50) }}"
+            - id: "8.2"
+              name: "EDR déployé et configuré"
+              status: "{{ 'done' if edr_agent.stdout == 'active' else 'not_started' }}"
+              detail: "EDR agent: {{ edr_agent.stdout }}"
+            - id: "8.3"
+              name: "Atelier de sécurité réalisé"
+              status: "{{ 'done' if (security_workshop.matched | default(0)) > 0 else 'not_started' }}"
+              detail: "{{ security_workshop.matched | default(0) }} workshop docs found"
+            - id: "8.4"
+              name: "Serveurs intégrés dans le SOC"
+              status: "{{ 'done' if (soc_integration.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ soc_integration.stdout }} syslog/SIEM forwarding rules"
+            - id: "8.5"
+              name: "Solution MFA déployée"
+              status: "{{ 'done' if (mfa_check.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ mfa_check.stdout }} MFA PAM modules configured"
+            - id: "8.6"
+              name: "Pentest réalisé"
+              status: "{{ 'done' if (pentest_report.matched | default(0)) > 0 else 'not_started' }}"
+              detail: "{{ pentest_report.matched | default(0) }} pentest reports found"
+            - id: "8.7"
+              name: "Plan de remédiation clôturé"
+              status: "{{ 'done' if (remediation_plan.matched | default(0)) > 0 else 'not_started' }}"
+              detail: "{{ remediation_plan.matched | default(0) }} remediation docs found"
+            - id: "8.8"
+              name: "Atelier de sécurité réalisé (2)"
+              status: "{{ 'done' if (security_workshop_2.matched | default(0)) > 0 else 'not_started' }}"
+              detail: "Same as 8.3"
+            - id: "8.9"
+              name: "PCA livré au client"
+              status: "{{ 'done' if (pca_doc.matched | default(0)) > 0 else 'not_started' }}"
+              detail: "{{ pca_doc.matched | default(0) }} PCA docs found"
+            - id: "8.10"
+              name: "PAS sécurité livré"
+              status: "{{ 'done' if (pas_doc.matched | default(0)) > 0 else 'not_started' }}"
+              detail: "{{ pas_doc.matched | default(0) }} PAS docs found"
+            - id: "8.11"
+              name: "Revue comptes systèmes/applicatifs"
+              status: "{{ 'done' if (account_review.stdout | int) == 0 else 'in_progress' }}"
+              detail: "{{ account_review.stdout }} accounts with empty/locked passwords"
+            - id: "8.12"
+              name: "Politique mots de passe appliquée"
+              status: "{{ 'done' if (password_policy.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ password_policy.stdout }} password policy rules configured"
+            - id: "8.13"
+              name: "Droit root retiré pour SHRS"
+              status: "{{ 'done' if (shrs_root.stdout | int) == 0 else 'not_started' }}"
+              detail: "{{ shrs_root.stdout }} sudoers entries for SHRS (should be 0)"
+            - id: "8.14"
+              name: "Comptes Oracle par défaut supprimés"
+              status: >-
+                {{ 'done' if oracle_accounts.stdout == 'oracle_not_installed' or (oracle_accounts.stdout | int) > 0
+                   else 'not_started' if oracle_accounts.stdout != 'oracle_not_installed'
+                   else 'na' }}
+              detail: "{{ oracle_accounts.stdout }}"
+            - id: "8.15"
+              name: "Certificat électronique vérifié"
+              status: "{{ 'done' if (cert_check.stdout | int) > 0 else 'not_started' }}"
+              detail: "{{ cert_check.stdout }} valid certificates (>30 days)"
+
+    - name: Output JSON result
+      debug:
+        msg: "{{ section_result | to_json }}"

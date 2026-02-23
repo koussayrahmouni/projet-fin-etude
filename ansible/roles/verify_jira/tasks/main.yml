@@ -1,4 +1,8 @@
 ---
+# This role is kept for backwards compatibility.
+# The main playbook (playbooks/verify_jira.yml) now handles everything directly.
+# This role simply delegates to the same script with the standardized output format.
+
 - name: Ensure verification script is present and executable
   file:
     path: "{{ playbook_dir }}/../scripts/verify_jira.py"
@@ -16,40 +20,14 @@
     DEFAULT_TRANSITIONS: "{{ default_transition_names | join(',') }}"
   register: verify_run
   changed_when: false
-  failed_when: false   # ← important: we want to parse even failed runs
+  failed_when: false
 
 - name: Parse verification JSON output
   set_fact:
-    verify_result: "{{ verify_run.stdout | from_json }}"
+    section_result: "{{ verify_run.stdout | from_json }}"
   when: verify_run.stdout | length > 0
 
-- name: Fail if critical verification steps failed
-  fail:
-    msg: |
-      Verification failed for client {{ client_name }}
-
-      Project found ..........: {{ verify_result.checks | selectattr('name','equalto','find_project') | map(attribute='ok') | first | default('missing') }}
-      Component created ......: {{ verify_result.checks | selectattr('name','equalto','component_creation') | map(attribute='ok') | first | default('missing') }}
-      RUN project found ......: {{ verify_result.checks | selectattr('name','equalto','run_project') | map(attribute='ok') | first | default('missing') }}
-      Build issues closed ....: {{ verify_result.checks | selectattr('name','equalto','close_build_issues') | map(attribute='results') | flatten | map(attribute='result.ok') | list | unique | join(', ') }}
-      Service desk informed ..: {{ verify_result.checks | selectattr('name','equalto','inform_service_desk') | map(attribute='created') | first | default('missing') }}
-  when: >
-    verify_result is defined and
-    (
-      (verify_result.checks | selectattr('name','equalto','find_project') | map(attribute='ok') | first | default(false)) != true
-      or
-      (verify_result.checks | selectattr('name','equalto','component_creation') | map(attribute='created') | first | default(false)) != true
-      or
-      (verify_result.checks | selectattr('name','equalto','run_project') | map(attribute='ok') | first | default(false)) != true
-      or
-      (verify_result.checks | selectattr('name','equalto','inform_service_desk') | map(attribute='created') | first | default(false)) != true
-    )
-
-- #name: Show full verification result (even on success)
-  #debug:
-    #var: verify_result
-
-
-
-
-
+- name: Output JSON result
+  debug:
+    msg: "{{ section_result | to_json }}"
+  when: section_result is defined

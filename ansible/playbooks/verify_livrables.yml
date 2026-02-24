@@ -2,8 +2,6 @@
 - name: "Section 6 - Verify Livrables (Deliverables)"
   hosts: local
   gather_facts: true
-  vars:
-    client_name: "{{ client_name | default('default') }}"
   vars_files:
     - ../group_vars/all.yml
 

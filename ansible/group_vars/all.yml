@@ -4,6 +4,9 @@
 # Non-sensitive defaults. Move secrets to ansible-vault.
 # Usage: ansible-playbook playbooks/<section>.yml -e "client_name=Nexity"
 
+# --- Global ---
+client_name: "default"
+
 # --- Section 1: JIRA ---
 jira_url: "http://localhost:8081"
 jira_user: "mock"

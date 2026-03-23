@@ -1,164 +1,168 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+export const runtime = "nodejs";
+  import { NextResponse } from "next/server";
+  import { auth } from "@/lib/auth";
 
-const AWX_URL = process.env.AWX_URL || "http://10.7.157.105:30080";
-const AWX_USER = process.env.AWX_USER || "admin";
-const AWX_PASSWORD = process.env.AWX_PASSWORD || "np8H1YJCFprU6JVSJVluIcWRmPkvBGuF";
+  const AWX_URL = process.env.AWX_URL || "http://10.7.157.105:30080";
+  const AWX_USER = process.env.AWX_USER || "admin";
+  const AWX_PASSWORD = process.env.AWX_PASSWORD || "np8H1YJCFprU6JVSJVluIcWRmPkvBGuF";
 
-// Map section numbers to AWX job template names
-const SECTION_TEMPLATES: Record<number, string> = {
-  1: "B2R-Verify-JIRA",
-  2: "B2R-Verify-Dollar-Universe",
-  3: "B2R-Verify-Plan-Production",
-  4: "B2R-Verify-Env-Applicatif",
-  5: "B2R-Verify-Monitoring",
-  6: "B2R-Verify-Livrables",
-  7: "B2R-Verify-Systeme-Infra",
-  8: "B2R-Verify-Security",
-};
-
-async function awxFetch(path: string, options: RequestInit = {}) {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Authorization:
-      "Basic " + Buffer.from(`${AWX_USER}:${AWX_PASSWORD}`).toString("base64"),
+  // Map section numbers to AWX job template names
+  const SECTION_TEMPLATES: Record<number, string> = {
+    1: "B2R Section 1 - JIRA Verification",
+    2: "B2R Section 2 - Dollar Universe Verification",
+    3: "B2R Section 3 - Plan de Production Verification",
+    4: "B2R Section 4 - Environnement Applicatif Verification",
+    5: "B2R Section 5 - Monitoring Verification",
+    6: "B2R Section 6 - Livrables Verification",
+    7: "B2R Section 7 - Système & Infrastructure Verification",
+    8: "B2R Section 8 - Security Verification",
   };
 
-  const res = await fetch(`${AWX_URL}/api/v2${path}`, {
-    ...options,
-    headers: { ...headers, ...(options.headers as Record<string, string>) },
-  });
+  async function awxFetch(path: string, options: RequestInit = {}) {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Authorization:
+        "Basic " + Buffer.from(`${AWX_USER}:${AWX_PASSWORD}`).toString("base64"),
+    };
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`AWX API error ${res.status}: ${text}`);
+    const res = await fetch(`${AWX_URL}/api/v2${path}`, {
+      ...options,
+      headers: { ...headers, ...(options.headers as Record<string, string>) },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`AWX API error ${res.status}: ${text}`);
+    }
+
+    return res.json();
   }
 
-  return res.json();
-}
+  // POST: Launch a job for a specific section
+  export async function POST(req: Request) {
+    const session = await auth.api.getSession({ headers: req.headers });
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-// POST: Launch a job for a specific section
-export async function POST(req: Request) {
-  const session = await auth.api.getSession({ headers: req.headers });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+    const { section, clientName } = await req.json();
 
-  const { section, clientName } = await req.json();
-
-  if (!section || !clientName) {
-    return NextResponse.json(
-      { error: "Missing section or clientName" },
-      { status: 400 }
-    );
-  }
-
-  const templateName = SECTION_TEMPLATES[section];
-  if (!templateName) {
-    return NextResponse.json(
-      { error: `Invalid section: ${section}` },
-      { status: 400 }
-    );
-  }
-
-  try {
-    // Find the job template by name
-    const templates = await awxFetch(
-      `/job_templates/?name=${encodeURIComponent(templateName)}`
-    );
-
-    if (!templates.results || templates.results.length === 0) {
+    if (!section || !clientName) {
       return NextResponse.json(
-        {
-          error: `Job template "${templateName}" not found in AWX. Please create it first.`,
-          setup_required: true,
-        },
-        { status: 404 }
+        { error: "Missing section or clientName" },
+        { status: 400 }
       );
     }
 
-    const templateId = templates.results[0].id;
-
-    // Launch the job with extra_vars
-    const job = await awxFetch(`/job_templates/${templateId}/launch/`, {
-      method: "POST",
-      body: JSON.stringify({
-        extra_vars: JSON.stringify({
-          client_name: clientName,
-          section: section,
-        }),
-      }),
-    });
-
-    return NextResponse.json({
-      jobId: job.id,
-      status: job.status,
-      url: `${AWX_URL}/#/jobs/playbook/${job.id}`,
-    });
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Unknown AWX error";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
-}
-
-// GET: Check job status and retrieve results
-export async function GET(req: Request) {
-  const session = await auth.api.getSession({ headers: req.headers });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { searchParams } = new URL(req.url);
-  const jobId = searchParams.get("jobId");
-
-  if (!jobId) {
-    return NextResponse.json({ error: "Missing jobId" }, { status: 400 });
-  }
-
-  try {
-    const job = await awxFetch(`/jobs/${jobId}/`);
-
-    const result: {
-      jobId: number;
-      status: string;
-      finished: string | null;
-      items?: Array<{
-        id: string;
-        name: string;
-        status: string;
-        detail: string;
-      }>;
-    } = {
-      jobId: job.id,
-      status: job.status, // pending, running, successful, failed, error, canceled
-      finished: job.finished,
-    };
-
-    // If the job is done, get the stdout to parse results
-    if (job.status === "successful" || job.status === "failed") {
-      try {
-        const stdout = await awxFetch(`/jobs/${jobId}/stdout/?format=json`);
-        // Parse the JSON result from the debug output
-        const content = stdout.content || "";
-        const jsonMatch = content.match(
-          new RegExp('"msg":\\s*"(\\{.*?section_result.*?\\})"', "s")
-        );
-        if (jsonMatch) {
-          const sectionResult = JSON.parse(
-            jsonMatch[1].replace(/\\"/g, '"').replace(/\\n/g, "")
-          );
-          result.items = sectionResult.items;
-        }
-      } catch {
-        // stdout parsing failed, that's ok
-      }
+    const templateName = SECTION_TEMPLATES[section];
+    if (!templateName) {
+      return NextResponse.json(
+        { error: `Invalid section: ${section}` },
+        { status: 400 }
+      );
     }
 
-    return NextResponse.json(result);
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Unknown AWX error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    try {
+      // Find the job template by name
+      const templates = await awxFetch(
+        `/job_templates/?name=${encodeURIComponent(templateName)}`
+      );
+
+      if (!templates.results || templates.results.length === 0) {
+        return NextResponse.json(
+          {
+            error: `Job template "${templateName}" not found in AWX. Please create it first.`,
+            setup_required: true,
+          },
+          { status: 404 }
+        );
+      }
+
+      const templateId = templates.results[0].id;
+
+      // Launch the job with extra_vars
+      const job = await awxFetch(`/job_templates/${templateId}/launch/`, {
+        method: "POST",
+        body: JSON.stringify({
+          extra_vars: JSON.stringify({
+            client_name: clientName,
+            section: section,
+          }),
+        }),
+      });
+
+      return NextResponse.json({
+        jobId: job.id,
+        status: job.status,
+        url: `${AWX_URL}/#/jobs/playbook/${job.id}`,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Unknown AWX error";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
   }
-}
+
+  // GET: Check job status and retrieve results
+  export async function GET(req: Request) {
+    const session = await auth.api.getSession({ headers: req.headers });
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const jobId = searchParams.get("jobId");
+
+    if (!jobId) {
+      return NextResponse.json({ error: "Missing jobId" }, { status: 400 });
+    }
+
+    try {
+      const job = await awxFetch(`/jobs/${jobId}/`);
+
+      const result: {
+        jobId: number;
+        status: string;
+        finished: string | null;
+        items?: Array<{
+          id: string;
+          name: string;
+          status: string;
+          detail: string;
+        }>;
+      } = {
+        jobId: job.id,
+        status: job.status, // pending, running, successful, failed, error, canceled
+        finished: job.finished,
+      };
+
+      // If the job is done, get results from the AWX job events API
+      if (job.status === "successful" || job.status === "failed") {
+        try {
+          // Use the events API which returns properly structured JSON
+          // Filter for the "Output JSON result" debug task
+          const events = await awxFetch(
+            `/jobs/${jobId}/job_events/?event=runner_on_ok&task__contains=Output&page_size=1`
+          );
+
+          if (events.results && events.results.length > 0) {
+            const eventData = events.results[0].event_data;
+            const msg = eventData?.res?.msg;
+            if (msg) {
+              const sectionResult =
+                typeof msg === "string" ? JSON.parse(msg) : msg;
+              result.items = sectionResult.items;
+            }
+          }
+        } catch (parseErr) {
+          console.error("Failed to parse AWX job events:", parseErr);
+        }
+      }
+
+      return NextResponse.json(result);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Unknown AWX error";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+  }

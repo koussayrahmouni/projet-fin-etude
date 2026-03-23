@@ -9,7 +9,7 @@ export async function GET(req: Request) {
     try {
         const session = await auth.api.getSession({ headers: req.headers });
 
-        if (!session?.user || !['admin', 'superadmin'].includes(session.user.role)) {
+        if (!session?.user || !['admin', 'superadmin'].includes(session.user.role ?? '')) {
             return NextResponse.json(
                 { error: 'Unauthorized - Admin access required' },
                 { status: 403 }
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     try {
         const session = await auth.api.getSession({ headers: req.headers });
 
-        if (!session?.user || !['admin', 'superadmin'].includes(session.user.role)) {
+        if (!session?.user || !['admin', 'superadmin'].includes(session.user.role ?? '')) {
             return NextResponse.json(
                 { error: 'Unauthorized - Admin access required' },
                 { status: 403 }
@@ -145,7 +145,7 @@ export async function DELETE(req: Request) {
     try {
         const session = await auth.api.getSession({ headers: req.headers });
 
-        if (!session?.user || !['admin', 'superadmin'].includes(session.user.role)) {
+        if (!session?.user || !['admin', 'superadmin'].includes(session.user.role ?? '')) {
             return NextResponse.json(
                 { error: 'Unauthorized - Admin access required' },
                 { status: 403 }

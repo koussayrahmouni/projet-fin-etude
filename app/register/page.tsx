@@ -19,9 +19,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { createAuthClient } from "better-auth/client"; // Adjust import if your setup uses a different path (e.g., "@/lib/auth-client")
-
-const authClient = createAuthClient();
+import { authClient } from "@/lib/auth-client";
 
 export default function RegisterPage() {
   const router = useRouter();

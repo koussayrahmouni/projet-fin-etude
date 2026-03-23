@@ -1,3 +1,4 @@
+export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { auth } from "@/lib/auth";
@@ -12,7 +13,7 @@ export async function POST(req: Request) {
   }
 
   const userId = session.user.id;
-  const { id, clientName, clientInfo, data, version } = await req.json();
+  const { id, clientName, clientInfo, data, version, excelData } = await req.json();
 
   if (!id || !clientName || !data) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -26,11 +27,12 @@ export async function POST(req: Request) {
       SET client_name = $2,
           client_info = $3,
           data = $4,
+          excel_data = COALESCE($6, excel_data),
           version = version + 1,
           updated_at = NOW()
       WHERE id = $1 AND version = $5
       `,
-      [id, clientName, JSON.stringify(clientInfo), JSON.stringify(data), version]
+      [id, clientName, JSON.stringify(clientInfo), JSON.stringify(data), version, excelData || null]
     );
 
     if (result.rowCount === 0) {
@@ -55,17 +57,18 @@ export async function POST(req: Request) {
   // ON CONFLICT: any user can update (shared workspace), version still increments
   const result = await pool.query(
     `
-    INSERT INTO checklist_sessions (id, user_id, client_name, client_info, data, version)
-    VALUES ($1, $2, $3, $4, $5, 1)
+    INSERT INTO checklist_sessions (id, user_id, client_name, client_info, data, excel_data, version)
+    VALUES ($1, $2, $3, $4, $5, $6, 1)
     ON CONFLICT (id) DO UPDATE SET
       client_name = EXCLUDED.client_name,
       client_info = EXCLUDED.client_info,
       data = EXCLUDED.data,
+      excel_data = COALESCE(EXCLUDED.excel_data, checklist_sessions.excel_data),
       version = checklist_sessions.version + 1,
       updated_at = NOW()
     RETURNING version
     `,
-    [id, userId, clientName, JSON.stringify(clientInfo), JSON.stringify(data)]
+    [id, userId, clientName, JSON.stringify(clientInfo), JSON.stringify(data), excelData || null]
   );
 
   return NextResponse.json({ saved: true, version: result.rows[0].version });

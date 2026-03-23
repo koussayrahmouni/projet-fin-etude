@@ -131,6 +131,7 @@ export const checklistSessions = pgTable(
     clientName: text("client_name").notNull(),
     clientInfo: jsonb("client_info"),
     data: jsonb("data").notNull(),
+    excelData: text("excel_data"),
     version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),

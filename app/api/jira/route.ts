@@ -1,3 +1,4 @@
+export const runtime = "nodejs";
 // app/api/verify-jira/route.ts
 import { NextResponse } from "next/server";
 import { execFile } from "child_process";

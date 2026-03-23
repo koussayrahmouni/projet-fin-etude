@@ -67,6 +67,10 @@ const data = {
       title: "Checklist",
       url: "/checklist",
       icon: IconChecklist,
+      items: [
+        { title: "Manage", url: "/checklist" },
+        { title: "Excel Editor", url: "/checklist/excel" },
+      ],
     },
     {
       title: "Analytics",

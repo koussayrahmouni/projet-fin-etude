@@ -202,7 +202,12 @@ function createDefaultTemplate(): ChecklistData {
     ],
   };
 }
-
+const apiFetch = (url: string, options: RequestInit = {}) => {
+  return fetch(url, {
+    credentials: "include",
+    ...options,
+  });
+};
 // ─── Client info options ───────────────────────────────────────────────────
 const OFFRE_OPTIONS = ["Pleiades 4you", "HRAccess Suite9 + HRAccess 4you", "Pleiades E5", "HRAccess Suite9", "HRAccess Suite7"];
 const PRESTATION_OPTIONS = ["Hosting Only", "Processing", "Hébergement + Exploitation"];
@@ -227,6 +232,8 @@ export default function ChecklistPage() {
   const [collapsedSections, setCollapsedSections] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
   const [activeEditors, setActiveEditors] = useState<{ user_id: string; user_name: string }[]>([]);
+  const [savingExcel, setSavingExcel] = useState(false);
+  const [excelSaved, setExcelSaved] = useState(false);
 
   const saveTimeout = useRef<any>(null);
   const presenceInterval = useRef<any>(null);
@@ -248,17 +255,17 @@ export default function ChecklistPage() {
     // Send heartbeat and check for other editors
     async function sendHeartbeat() {
       try {
-        await fetch("/api/checklist/presence", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ checklistId: activeId }),
-        });
+        await apiFetch("/api/checklist/presence", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ checklistId: activeId }),
+});
       } catch {}
     }
 
     async function pollEditors() {
       try {
-        const res = await fetch(`/api/checklist/presence?checklistId=${activeId}`);
+        const res = await apiFetch(`/api/checklist/presence?checklistId=${activeId}`);
         if (res.ok) {
           const { editors } = await res.json();
           // Only update state if editors actually changed (avoid unnecessary re-renders)
@@ -285,46 +292,54 @@ export default function ChecklistPage() {
     return () => {
       if (presenceInterval.current) clearInterval(presenceInterval.current);
       if (activeId) {
-        fetch(`/api/checklist/presence?checklistId=${activeId}`, { method: "DELETE" }).catch(() => {});
+       apiFetch(`/api/checklist/presence?checklistId=${activeId}`, {
+  method: "DELETE",
+});
       }
     };
   }, [activeId]);
 
   async function loadChecklists() {
-    try {
-      const res = await fetch("/api/checklist/list");
-      if (res.ok) {
-        const list = await res.json();
-        setChecklists(list);
-      }
-    } catch (err) {
-      console.error("Failed to load checklists:", err);
-    } finally {
-      setLoading(false);
+  try {
+    const res = await apiFetch("/api/checklist/list");
+    if (res.ok) {
+      const list = await res.json();
+      setChecklists(list);
     }
+  } catch (err) {
+    console.error("Failed to load checklists:", err);
+  } finally {
+    setLoading(false);
   }
-
+}
   // ─── Load a specific checklist ─────────────────────────────────────────
   async function loadChecklist(id: string) {
-    try {
-      setLoading(true);
-      setConflict(false);
-      const res = await fetch(`/api/checklist/load?id=${id}`);
-      if (!res.ok) throw new Error("Load failed");
-      const row = await res.json();
-      setActiveId(id);
-      setClientName(row.client_name);
-      setClientInfo(typeof row.client_info === "string" ? JSON.parse(row.client_info) : row.client_info || { offre: "", prestation: "", infra: "", gouvernance: "" });
-      setData(typeof row.data === "string" ? JSON.parse(row.data) : row.data);
-      versionRef.current = row.version ?? null;
-      setShowNewForm(false);
-    } catch (err) {
-      console.error("Failed to load checklist:", err);
-    } finally {
-      setLoading(false);
-    }
-  }
+  try {
+    setLoading(true);
+    setConflict(false);
 
+    const res = await apiFetch(`/api/checklist/load?id=${id}`);
+    if (!res.ok) throw new Error("Load failed");
+
+    const row = await res.json();
+
+    setActiveId(id);
+    setClientName(row.client_name);
+    setClientInfo(
+      typeof row.client_info === "string"
+        ? JSON.parse(row.client_info)
+        : row.client_info || { offre: "", prestation: "", infra: "", gouvernance: "" }
+    );
+    setData(typeof row.data === "string" ? JSON.parse(row.data) : row.data);
+
+    versionRef.current = row.version ?? null;
+    setShowNewForm(false);
+  } catch (err) {
+    console.error("Failed to load checklist:", err);
+  } finally {
+    setLoading(false);
+  }
+}
   // ─── Create new checklist ──────────────────────────────────────────────
   function createChecklist() {
     if (!newClientName.trim()) return;
@@ -351,51 +366,65 @@ export default function ChecklistPage() {
     }, 800);
   }
 
-  async function doSave(id: string, name: string, info: ClientInfo, checklistData: ChecklistData) {
-    setSaving(true);
-    try {
-      const res = await fetch("/api/checklist/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, clientName: name, clientInfo: info, data: checklistData, version: versionRef.current }),
-      });
+  async function doSave(
+  id: string,
+  name: string,
+  info: ClientInfo,
+  checklistData: ChecklistData,
+  excelBase64?: string
+) {
+  setSaving(true);
+  try {
+    const res = await apiFetch("/api/checklist/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id,
+        clientName: name,
+        clientInfo: info,
+        data: checklistData,
+        version: versionRef.current,
+        excelData: excelBase64,
+      }),
+    });
 
-      if (res.status === 409) {
-        // Version conflict — another user/tab modified this checklist
-        setConflict(true);
-        return;
-      }
-
-      if (res.ok) {
-        const result = await res.json();
-        versionRef.current = result.version;
-        setConflict(false);
-      }
-
-    } catch (err) {
-      console.error("Save failed:", err);
-    } finally {
-      setSaving(false);
+    if (res.status === 409) {
+      setConflict(true);
+      return;
     }
-  }
 
+    if (res.ok) {
+      const result = await res.json();
+      versionRef.current = result.version;
+      setConflict(false);
+    }
+  } catch (err) {
+    console.error("Save failed:", err);
+  } finally {
+    setSaving(false);
+  }
+}
   // ─── Delete checklist ─────────────────────────────────────────────────
-  async function deleteChecklist(id: string) {
-    if (!confirm("Are you sure you want to delete this checklist?")) return;
-    try {
-      await fetch(`/api/checklist/delete?id=${id}`, { method: "DELETE" });
-      if (activeId === id) {
-        setActiveId(null);
-        setData(null);
-        setClientName("");
-        setClientInfo({ offre: "", prestation: "", infra: "", gouvernance: "" });
-      }
-      await loadChecklists();
-    } catch (err) {
-      console.error("Delete failed:", err);
-    }
-  }
+ async function deleteChecklist(id: string) {
+  if (!confirm("Are you sure you want to delete this checklist?")) return;
 
+  try {
+    await apiFetch(`/api/checklist/delete?id=${id}`, {
+      method: "DELETE",
+    });
+
+    if (activeId === id) {
+      setActiveId(null);
+      setData(null);
+      setClientName("");
+      setClientInfo({ offre: "", prestation: "", infra: "", gouvernance: "" });
+    }
+
+    await loadChecklists();
+  } catch (err) {
+    console.error("Delete failed:", err);
+  }
+}
   // ─── Update item status ───────────────────────────────────────────────
   function updateItem(sectionNumber: number, itemId: string, field: "status" | "comment", value: string) {
     if (!data) return;
@@ -479,12 +508,14 @@ export default function ChecklistPage() {
 
     try {
       // Launch the AWX job
-      const launchRes = await fetch("/api/checklist/ansible-check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ section: sectionNumber, clientName: clientName.trim() }),
-      });
-
+      const launchRes = await apiFetch("/api/checklist/ansible-check", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    section: sectionNumber,
+    clientName: clientName.trim(),
+  }),
+});
       const launchData = await launchRes.json();
 
       if (!launchRes.ok) {
@@ -502,7 +533,9 @@ export default function ChecklistPage() {
       // Poll for job completion
       const pollInterval = setInterval(async () => {
         try {
-          const statusRes = await fetch(`/api/checklist/ansible-check?jobId=${launchData.jobId}`);
+          const statusRes = await apiFetch(
+  `/api/checklist/ansible-check?jobId=${launchData.jobId}`
+);
           const statusData = await statusRes.json();
 
           if (statusData.status === "successful" || statusData.status === "failed") {
@@ -512,7 +545,7 @@ export default function ChecklistPage() {
             if (statusData.items && activeId) {
               // Fetch the LATEST data from DB before merging Ansible results
               // This prevents overwriting changes made by other users during the Ansible run
-              const freshRes = await fetch(`/api/checklist/load?id=${activeId}`);
+              const freshRes = await apiFetch(`/api/checklist/load?id=${activeId}`);
               if (freshRes.ok) {
                 const freshRow = await freshRes.json();
                 const freshData = typeof freshRow.data === "string" ? JSON.parse(freshRow.data) : freshRow.data;
@@ -562,10 +595,8 @@ export default function ChecklistPage() {
     }
   }
 
-  // ─── Excel export (PDF-matching design with ExcelJS) ─────────────────────
-  async function handleExport() {
-    if (!data) return;
-
+  // ─── Excel generation (reusable) ─────────────────────────────────────────
+  async function generateExcelBuffer(checklistData: ChecklistData, name: string, info: ClientInfo): Promise<ArrayBuffer> {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("B2R Checklist");
 
@@ -605,11 +636,22 @@ export default function ChecklistPage() {
       { width: 35 },  // F: Comment
     ];
 
-    let r = 1; // ExcelJS is 1-indexed
+    // Compute overall progress for avancement
+    const allItems = checklistData.sections.flatMap((s) => s.items).filter((i) => i.status !== "na");
+    const allDone = allItems.filter((i) => i.status === "done").length;
+    const computedOverallProgress = allItems.length > 0 ? Math.round((allDone / allItems.length) * 100) : 0;
 
-    // ════════════════════════════════════════════════════════════════════════
+    // Section progress helper
+    function secProgress(section: ChecklistSection) {
+      const applicable = section.items.filter((i) => i.status !== "na");
+      if (applicable.length === 0) return 100;
+      const done = applicable.filter((i) => i.status === "done").length;
+      return Math.round((done / applicable.length) * 100);
+    }
+
+    let r = 1;
+
     // ROW 1: Title bar
-    // ════════════════════════════════════════════════════════════════════════
     ws.mergeCells(r, 1, r, 6);
     const titleRow = ws.getRow(r);
     titleRow.height = 36;
@@ -622,18 +664,11 @@ export default function ChecklistPage() {
       ws.getCell(r, c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${ORANGE}` } };
     }
     r++;
-
-    // ════════════════════════════════════════════════════════════════════════
     // ROW 2: Empty spacer
-    // ════════════════════════════════════════════════════════════════════════
     ws.getRow(r).height = 8;
     r++;
 
-    // ════════════════════════════════════════════════════════════════════════
-    // ROW 3-8: Client info (cols A-C) + Avancement (cols D-F)
-    // ════════════════════════════════════════════════════════════════════════
-
-    // -- Client header --
+    // Client header
     ws.mergeCells(r, 1, r, 3);
     const clientHeaderCell = ws.getCell(r, 1);
     clientHeaderCell.value = "Client";
@@ -645,7 +680,7 @@ export default function ChecklistPage() {
       ws.getCell(r, c).border = orangeBorder;
     }
 
-    // -- Avancement header --
+    // Avancement header
     ws.mergeCells(r, 4, r, 6);
     const avancementHeaderCell = ws.getCell(r, 4);
     avancementHeaderCell.value = "Avancement";
@@ -659,18 +694,17 @@ export default function ChecklistPage() {
     ws.getRow(r).height = 22;
     r++;
 
-    // -- Client info rows + Avancement rows --
+    // Client info rows + Avancement rows
     const clientFields = [
-      ["Nom", clientName],
-      ["Offre", clientInfo.offre || "—"],
-      ["Prestation", clientInfo.prestation || "—"],
-      ["Infra", clientInfo.infra || "—"],
-      ["Gouvernance", clientInfo.gouvernance || "—"],
+      ["Nom", name],
+      ["Offre", info.offre || "—"],
+      ["Prestation", info.prestation || "—"],
+      ["Infra", info.infra || "—"],
+      ["Gouvernance", info.gouvernance || "—"],
     ];
 
-    // Per-owner progress for avancement
     const ownerGroups: Record<string, { done: number; total: number }> = {};
-    data.sections.forEach((s) =>
+    checklistData.sections.forEach((s) =>
       s.items.forEach((item) => {
         const key = item.owner.includes("APP") ? "APP Delivery"
           : item.owner.includes("ARCHITECTURE") ? "NSS Architecture"
@@ -683,17 +717,16 @@ export default function ChecklistPage() {
         }
       })
     );
-    const avancementRows = Object.entries(ownerGroups).map(([name, { done, total }]) => ({
-      name,
+    const avancementRows = Object.entries(ownerGroups).map(([avName, { done, total }]) => ({
+      name: avName,
       pct: total > 0 ? Math.round((done / total) * 100) : 0,
     }));
-    avancementRows.push({ name: "Total", pct: overallProgress });
+    avancementRows.push({ name: "Total", pct: computedOverallProgress });
 
     for (let i = 0; i < Math.max(clientFields.length, avancementRows.length); i++) {
       const row = ws.getRow(r);
       row.height = 18;
 
-      // Client info (cols 1-3)
       if (i < clientFields.length) {
         const labelCell = ws.getCell(r, 1);
         labelCell.value = clientFields[i][0];
@@ -709,7 +742,6 @@ export default function ChecklistPage() {
         ws.getCell(r, 3).border = thinBorder;
       }
 
-      // Avancement (cols 4-6)
       if (i < avancementRows.length) {
         const av = avancementRows[i];
         ws.mergeCells(r, 4, r, 5);
@@ -730,15 +762,11 @@ export default function ChecklistPage() {
       r++;
     }
 
-    // ════════════════════════════════════════════════════════════════════════
     // Spacer
-    // ════════════════════════════════════════════════════════════════════════
     ws.getRow(r).height = 8;
     r++;
 
-    // ════════════════════════════════════════════════════════════════════════
     // "Items checklist" sub-title
-    // ════════════════════════════════════════════════════════════════════════
     ws.mergeCells(r, 1, r, 6);
     const itemsTitleCell = ws.getCell(r, 1);
     itemsTitleCell.value = "Items checklist";
@@ -751,9 +779,7 @@ export default function ChecklistPage() {
     ws.getRow(r).height = 26;
     r++;
 
-    // ════════════════════════════════════════════════════════════════════════
     // Table column headers
-    // ════════════════════════════════════════════════════════════════════════
     const headers = ["", "CHECKLIST ITEMS", "Description", "OWNER", "Status", "Commentaire"];
     const headerRow = ws.getRow(r);
     headerRow.height = 24;
@@ -772,13 +798,10 @@ export default function ChecklistPage() {
     });
     r++;
 
-    // ════════════════════════════════════════════════════════════════════════
     // Section rows + Item rows
-    // ════════════════════════════════════════════════════════════════════════
-    data.sections.forEach((section) => {
-      const prog = sectionProgress(section);
+    checklistData.sections.forEach((section) => {
+      const prog = secProgress(section);
 
-      // -- Section header row (orange bar) --
       const sectionRow = ws.getRow(r);
       sectionRow.height = 24;
 
@@ -798,7 +821,6 @@ export default function ChecklistPage() {
       progCell.font = { bold: true, size: 10, color: { argb: `FF${WHITE}` } };
       progCell.alignment = { horizontal: "center", vertical: "middle" };
 
-      // Fill all cells in section row with orange
       for (let c = 1; c <= 6; c++) {
         ws.getCell(r, c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${ORANGE_LIGHT}` } };
         ws.getCell(r, c).border = {
@@ -810,40 +832,34 @@ export default function ChecklistPage() {
       }
       r++;
 
-      // -- Item rows --
       section.items.forEach((item) => {
         const itemRow = ws.getRow(r);
         itemRow.height = 20;
 
-        // ID
         const idCell = ws.getCell(r, 1);
         idCell.value = item.id;
         idCell.font = { size: 9, color: { argb: "FF666666" } };
         idCell.alignment = { horizontal: "center", vertical: "middle" };
         idCell.border = thinBorder;
 
-        // Item name
         const itemNameCell = ws.getCell(r, 2);
         itemNameCell.value = item.name;
         itemNameCell.font = { size: 9 };
         itemNameCell.alignment = { vertical: "middle", wrapText: true };
         itemNameCell.border = thinBorder;
 
-        // Description
         const descCell = ws.getCell(r, 3);
         descCell.value = item.description || "";
         descCell.font = { size: 8, color: { argb: "FF666666" } };
         descCell.alignment = { vertical: "middle", wrapText: true };
         descCell.border = thinBorder;
 
-        // Owner
         const ownerCell = ws.getCell(r, 4);
         ownerCell.value = item.owner;
         ownerCell.font = { size: 8 };
         ownerCell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
         ownerCell.border = thinBorder;
 
-        // Status — checkmark / X / N/A with colors
         const statusCell = ws.getCell(r, 5);
         if (item.status === "done") {
           statusCell.value = "\u2714";
@@ -865,7 +881,6 @@ export default function ChecklistPage() {
         statusCell.alignment = { horizontal: "center", vertical: "middle" };
         statusCell.border = thinBorder;
 
-        // Comment
         const commentCell = ws.getCell(r, 6);
         commentCell.value = item.comment || "";
         commentCell.font = { size: 8 };
@@ -876,9 +891,38 @@ export default function ChecklistPage() {
       });
     });
 
-    // ── Write file ──
     const buffer = await wb.xlsx.writeBuffer();
+    return buffer as ArrayBuffer;
+  }
+
+  // ─── Excel export (download only) ────────────────────────────────────────
+  async function handleExport() {
+    if (!data) return;
+    const buffer = await generateExcelBuffer(data, clientName, clientInfo);
     saveAs(new Blob([buffer]), `B2R-Checklist-${clientName || "export"}.xlsx`);
+  }
+
+  // ─── Save Excel to DB for later use ────────────────────────────────────
+  async function handleSaveExcel() {
+    if (!data || !activeId) return;
+    setSavingExcel(true);
+    setExcelSaved(false);
+    try {
+      const buffer = await generateExcelBuffer(data, clientName, clientInfo);
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const excelBase64 = btoa(binary);
+      await doSave(activeId, clientName, clientInfo, data, excelBase64);
+      setExcelSaved(true);
+      setTimeout(() => setExcelSaved(false), 3000);
+    } catch (err) {
+      console.error("Failed to save Excel:", err);
+    } finally {
+      setSavingExcel(false);
+    }
   }
 
   // ─── Render ───────────────────────────────────────────────────────────
@@ -931,6 +975,17 @@ export default function ChecklistPage() {
                 </button>
                 {activeId && data && (
                   <>
+                    <button
+                      onClick={handleSaveExcel}
+                      disabled={savingExcel}
+                      className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                        excelSaved
+                          ? "bg-green-100 text-green-700 border border-green-300"
+                          : "bg-orange-500 text-white hover:bg-orange-600"
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      {savingExcel ? "Saving..." : excelSaved ? "Excel Saved!" : "Save Excel"}
+                    </button>
                     <button
                       onClick={handleExport}
                       className="px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium transition-colors"

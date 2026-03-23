@@ -1,9 +1,10 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "@/lib/db";
-import { users, sessions, accounts } from "@/drizzle/schema"; // <-- corrected path
+import { users, sessions, accounts } from "@/drizzle/schema";
 
 export const auth = betterAuth({
+  baseURL: "http://10.7.157.105:3000",
   trustedOrigins: [
     "http://localhost:3000",
     "http://10.7.157.105:3000",
@@ -16,16 +17,21 @@ export const auth = betterAuth({
       account: accounts,
     },
   }),
-  debug: true, // verbose logging for troubleshooting
+  debug: true,
   emailAndPassword: {
     enabled: true,
-    disableVerification: true, // no email verification needed
+    disableVerification: true,
   },
   advanced: {
-    disable2FA: true,
-    disableBanUser: true,
+    useSecureCookies: false,
+    cookiePrefix: "better-auth",
+    defaultCookieAttributes: {
+      secure: false,        // 👈 forces no Secure flag
+      httpOnly: true,
+      sameSite: "lax",
+    },
     database: {
-      generateId: false, // This disables Better Auth's ID generation; DB defaultRandom() will be used
+      generateId: false,
     },
   },
   user: {
@@ -33,11 +39,9 @@ export const auth = betterAuth({
       role: {
         type: "string" as const,
         enum: ["superadmin", "admin", "collaborator", "client"] as const,
-        input: false, // cannot be set by user
+        input: false,
         required: false,
       },
     },
   },
 });
-
-

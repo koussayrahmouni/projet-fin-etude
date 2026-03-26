@@ -12,7 +12,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  # --- NEW SERVICE ADDED BELOW ---
   adminer:
     image: adminer
     restart: always
@@ -21,8 +20,29 @@ services:
     depends_on:
       - postgres
     environment:
-      ADMINER_DEFAULT_SERVER: postgres   # note the indentation fix
-      ADMINER_DESIGN: pepa-linha        # also properly indented
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: pepa-linha
+
+  # ==================== YOUR NEXT.JS DASHBOARD ====================
+  nextjs-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nextjs-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+    networks:
+      - monitoring-internal
 
 volumes:
   postgres_data:
+
+networks:
+  monitoring-internal:
+    driver: bridge
+    external: true

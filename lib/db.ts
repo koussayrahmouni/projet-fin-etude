@@ -5,11 +5,7 @@ import * as schema from "@/drizzle/schema";
 
 // PG Pool
 export const pool = new Pool({
-  host: "localhost",
-  port: 5432,
-  user: "excel_user",
-  password: "excel_password",
-  database: "excel_editor",
+  connectionString: process.env.DATABASE_URL,
 });
 
 // Drizzle instance

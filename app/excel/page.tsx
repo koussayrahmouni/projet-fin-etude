@@ -540,7 +540,7 @@ export default function ExcelPage() {
       <AppSidebar />
 
       <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b bg-background px-4">
+        <header className="flex h-16 shrink-0 items-center gap-2 border-b bg-slate-50 px-4">
           <SidebarTrigger className="-ml-1" />
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight">Excel Checklist Parser</h1>

@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
-import * as XLSX from "xlsx";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import { v4 as uuid } from "uuid";
@@ -48,6 +47,12 @@ type SavedChecklist = {
   progress: number;
   totalItems: number;
   doneItems: number;
+};
+
+type AwxClient = {
+  id: number;
+  hostName: string;
+  clientName: string;
 };
 
 // ─── Status helpers ────────────────────────────────────────────────────────
@@ -202,12 +207,14 @@ function createDefaultTemplate(): ChecklistData {
     ],
   };
 }
+
 const apiFetch = (url: string, options: RequestInit = {}) => {
   return fetch(url, {
     credentials: "include",
     ...options,
   });
 };
+
 // ─── Client info options ───────────────────────────────────────────────────
 const OFFRE_OPTIONS = ["Pleiades 4you", "HRAccess Suite9 + HRAccess 4you", "Pleiades E5", "HRAccess Suite9", "HRAccess Suite7"];
 const PRESTATION_OPTIONS = ["Hosting Only", "Processing", "Hébergement + Exploitation"];
@@ -216,7 +223,7 @@ const GOUVERNANCE_OPTIONS = ["DP", "NDP"];
 
 // ─── Component ─────────────────────────────────────────────────────────────
 export default function ChecklistPage() {
-  // State
+  // ── Core state ────────────────────────────────────────────────────────
   const [checklists, setChecklists] = useState<SavedChecklist[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [clientName, setClientName] = useState("");
@@ -226,41 +233,76 @@ export default function ChecklistPage() {
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState(false);
   const versionRef = useRef<number | null>(null);
+
+  // ── New checklist form ────────────────────────────────────────────────
   const [showNewForm, setShowNewForm] = useState(false);
   const [newClientName, setNewClientName] = useState("");
   const [newClientInfo, setNewClientInfo] = useState<ClientInfo>({ offre: "", prestation: "", infra: "", gouvernance: "" });
+
+  // ── UI state ──────────────────────────────────────────────────────────
   const [collapsedSections, setCollapsedSections] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
   const [activeEditors, setActiveEditors] = useState<{ user_id: string; user_name: string }[]>([]);
   const [savingExcel, setSavingExcel] = useState(false);
   const [excelSaved, setExcelSaved] = useState(false);
 
-  const saveTimeout = useRef<any>(null);
-  const presenceInterval = useRef<any>(null);
+  // ── Ansible / AWX state ───────────────────────────────────────────────
+  const [ansibleRunning, setAnsibleRunning] = useState<Record<number, boolean>>({});
+  const [awxClients, setAwxClients] = useState<AwxClient[]>([]);
+  const [selectedAwxClient, setSelectedAwxClient] = useState<string>("");
+  const [loadingClients, setLoadingClients] = useState(false);
 
-  // ─── Load checklist list on mount ──────────────────────────────────────
+  const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const presenceInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ─── Load checklist list on mount ──────────────────────────────────
   useEffect(() => {
     loadChecklists();
   }, []);
 
+  // ─── Fetch AWX clients when a checklist becomes active ─────────────
+  useEffect(() => {
+    if (!activeId) {
+      setAwxClients([]);
+      setSelectedAwxClient("");
+      return;
+    }
+
+    setLoadingClients(true);
+    apiFetch("/api/checklist/clients")
+      .then((res) => res.json())
+      .then((clients: AwxClient[]) => {
+        setAwxClients(clients);
+        // Auto-select if the checklist clientName matches an AWX client
+        const match = clients.find(
+          (c) => c.clientName.toLowerCase() === clientName.toLowerCase()
+        );
+        if (match) {
+          setSelectedAwxClient(match.clientName);
+        } else if (clients.length > 0) {
+          setSelectedAwxClient(clients[0].clientName);
+        }
+      })
+      .catch((err) => console.error("Failed to load AWX clients:", err))
+      .finally(() => setLoadingClients(false));
+  }, [activeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ─── Presence: heartbeat + poll for other editors ────────────────────
   useEffect(() => {
     if (!activeId) {
-      // Clear presence when no checklist is open
       setActiveEditors([]);
       if (presenceInterval.current) clearInterval(presenceInterval.current);
       return;
     }
 
-    // Send heartbeat and check for other editors
     async function sendHeartbeat() {
       try {
         await apiFetch("/api/checklist/presence", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ checklistId: activeId }),
-});
-      } catch {}
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ checklistId: activeId }),
+        });
+      } catch { }
     }
 
     async function pollEditors() {
@@ -268,79 +310,75 @@ export default function ChecklistPage() {
         const res = await apiFetch(`/api/checklist/presence?checklistId=${activeId}`);
         if (res.ok) {
           const { editors } = await res.json();
-          // Only update state if editors actually changed (avoid unnecessary re-renders)
           setActiveEditors((prev) => {
             const prevIds = prev.map((e) => e.user_id).join(",");
             const newIds = editors.map((e: { user_id: string }) => e.user_id).join(",");
             return prevIds === newIds ? prev : editors;
           });
         }
-      } catch {}
+      } catch { }
     }
 
-    // Initial heartbeat + poll
     sendHeartbeat();
     pollEditors();
 
-    // Repeat every 10 seconds
     presenceInterval.current = setInterval(() => {
       sendHeartbeat();
       pollEditors();
     }, 10000);
 
-    // Cleanup: tell server we left when unmounting or switching checklists
     return () => {
       if (presenceInterval.current) clearInterval(presenceInterval.current);
       if (activeId) {
-       apiFetch(`/api/checklist/presence?checklistId=${activeId}`, {
-  method: "DELETE",
-});
+        apiFetch(`/api/checklist/presence?checklistId=${activeId}`, { method: "DELETE" });
       }
     };
   }, [activeId]);
 
+  // ─── Load checklist list ──────────────────────────────────────────────
   async function loadChecklists() {
-  try {
-    const res = await apiFetch("/api/checklist/list");
-    if (res.ok) {
-      const list = await res.json();
-      setChecklists(list);
+    try {
+      const res = await apiFetch("/api/checklist/list");
+      if (res.ok) {
+        const list = await res.json();
+        setChecklists(list);
+      }
+    } catch (err) {
+      console.error("Failed to load checklists:", err);
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    console.error("Failed to load checklists:", err);
-  } finally {
-    setLoading(false);
   }
-}
-  // ─── Load a specific checklist ─────────────────────────────────────────
+
+  // ─── Load a specific checklist ────────────────────────────────────────
   async function loadChecklist(id: string) {
-  try {
-    setLoading(true);
-    setConflict(false);
+    try {
+      setLoading(true);
+      setConflict(false);
 
-    const res = await apiFetch(`/api/checklist/load?id=${id}`);
-    if (!res.ok) throw new Error("Load failed");
+      const res = await apiFetch(`/api/checklist/load?id=${id}`);
+      if (!res.ok) throw new Error("Load failed");
 
-    const row = await res.json();
+      const row = await res.json();
 
-    setActiveId(id);
-    setClientName(row.client_name);
-    setClientInfo(
-      typeof row.client_info === "string"
-        ? JSON.parse(row.client_info)
-        : row.client_info || { offre: "", prestation: "", infra: "", gouvernance: "" }
-    );
-    setData(typeof row.data === "string" ? JSON.parse(row.data) : row.data);
-
-    versionRef.current = row.version ?? null;
-    setShowNewForm(false);
-  } catch (err) {
-    console.error("Failed to load checklist:", err);
-  } finally {
-    setLoading(false);
+      setActiveId(id);
+      setClientName(row.client_name);
+      setClientInfo(
+        typeof row.client_info === "string"
+          ? JSON.parse(row.client_info)
+          : row.client_info || { offre: "", prestation: "", infra: "", gouvernance: "" }
+      );
+      setData(typeof row.data === "string" ? JSON.parse(row.data) : row.data);
+      versionRef.current = row.version ?? null;
+      setShowNewForm(false);
+    } catch (err) {
+      console.error("Failed to load checklist:", err);
+    } finally {
+      setLoading(false);
+    }
   }
-}
-  // ─── Create new checklist ──────────────────────────────────────────────
+
+  // ─── Create new checklist ─────────────────────────────────────────────
   function createChecklist() {
     if (!newClientName.trim()) return;
     const id = uuid();
@@ -352,80 +390,75 @@ export default function ChecklistPage() {
     setShowNewForm(false);
     setNewClientName("");
     setNewClientInfo({ offre: "", prestation: "", infra: "", gouvernance: "" });
-
-    // Save immediately
     doSave(id, newClientName.trim(), newClientInfo, template);
   }
 
   // ─── Save (debounced) ─────────────────────────────────────────────────
   function autosave(updatedData: ChecklistData) {
     if (!activeId) return;
-    clearTimeout(saveTimeout.current);
+    if (saveTimeout.current) clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(() => {
       doSave(activeId!, clientName, clientInfo, updatedData);
     }, 800);
   }
 
   async function doSave(
-  id: string,
-  name: string,
-  info: ClientInfo,
-  checklistData: ChecklistData,
-  excelBase64?: string
-) {
-  setSaving(true);
-  try {
-    const res = await apiFetch("/api/checklist/save", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id,
-        clientName: name,
-        clientInfo: info,
-        data: checklistData,
-        version: versionRef.current,
-        excelData: excelBase64,
-      }),
-    });
+    id: string,
+    name: string,
+    info: ClientInfo,
+    checklistData: ChecklistData,
+    excelBase64?: string
+  ) {
+    setSaving(true);
+    try {
+      const res = await apiFetch("/api/checklist/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id,
+          clientName: name,
+          clientInfo: info,
+          data: checklistData,
+          version: versionRef.current,
+          excelData: excelBase64,
+        }),
+      });
 
-    if (res.status === 409) {
-      setConflict(true);
-      return;
-    }
+      if (res.status === 409) {
+        setConflict(true);
+        return;
+      }
 
-    if (res.ok) {
-      const result = await res.json();
-      versionRef.current = result.version;
-      setConflict(false);
+      if (res.ok) {
+        const result = await res.json();
+        versionRef.current = result.version;
+        setConflict(false);
+      }
+    } catch (err) {
+      console.error("Save failed:", err);
+    } finally {
+      setSaving(false);
     }
-  } catch (err) {
-    console.error("Save failed:", err);
-  } finally {
-    setSaving(false);
   }
-}
+
   // ─── Delete checklist ─────────────────────────────────────────────────
- async function deleteChecklist(id: string) {
-  if (!confirm("Are you sure you want to delete this checklist?")) return;
-
-  try {
-    await apiFetch(`/api/checklist/delete?id=${id}`, {
-      method: "DELETE",
-    });
-
-    if (activeId === id) {
-      setActiveId(null);
-      setData(null);
-      setClientName("");
-      setClientInfo({ offre: "", prestation: "", infra: "", gouvernance: "" });
+  async function deleteChecklist(id: string) {
+    if (!confirm("Are you sure you want to delete this checklist?")) return;
+    try {
+      await apiFetch(`/api/checklist/delete?id=${id}`, { method: "DELETE" });
+      if (activeId === id) {
+        setActiveId(null);
+        setData(null);
+        setClientName("");
+        setClientInfo({ offre: "", prestation: "", infra: "", gouvernance: "" });
+      }
+      await loadChecklists();
+    } catch (err) {
+      console.error("Delete failed:", err);
     }
-
-    await loadChecklists();
-  } catch (err) {
-    console.error("Delete failed:", err);
   }
-}
-  // ─── Update item status ───────────────────────────────────────────────
+
+  // ─── Update item ──────────────────────────────────────────────────────
   function updateItem(sectionNumber: number, itemId: string, field: "status" | "comment", value: string) {
     if (!data) return;
     const newData: ChecklistData = {
@@ -444,26 +477,24 @@ export default function ChecklistPage() {
     autosave(newData);
   }
 
-  // ─── Progress calculation ──────────────────────────────────────────────
+  // ─── Progress ─────────────────────────────────────────────────────────
   function sectionProgress(section: ChecklistSection) {
     const applicable = section.items.filter((i) => i.status !== "na");
     if (applicable.length === 0) return 100;
-    const done = applicable.filter((i) => i.status === "done").length;
-    return Math.round((done / applicable.length) * 100);
+    return Math.round((applicable.filter((i) => i.status === "done").length / applicable.length) * 100);
   }
 
   const overallProgress = useMemo(() => {
     if (!data) return 0;
     const all = data.sections.flatMap((s) => s.items).filter((i) => i.status !== "na");
     if (all.length === 0) return 0;
-    const done = all.filter((i) => i.status === "done").length;
-    return Math.round((done / all.length) * 100);
+    return Math.round((all.filter((i) => i.status === "done").length / all.length) * 100);
   }, [data]);
 
   const totalItems = data ? data.sections.flatMap((s) => s.items).filter((i) => i.status !== "na").length : 0;
   const doneItems = data ? data.sections.flatMap((s) => s.items).filter((i) => i.status === "done").length : 0;
 
-  // ─── Toggle section collapse ───────────────────────────────────────────
+  // ─── Toggle section collapse ──────────────────────────────────────────
   function toggleSection(sectionNumber: number) {
     setCollapsedSections((prev) => {
       const next = new Set(prev);
@@ -493,13 +524,10 @@ export default function ChecklistPage() {
       .filter((section) => section.items.length > 0 || section.name.toLowerCase().includes(lower));
   }, [data, searchTerm]);
 
-  // ─── Ansible / AWX integration ──────────────────────────────────────────
-  const [ansibleRunning, setAnsibleRunning] = useState<Record<number, boolean>>({});
-  const [ansibleJobIds, setAnsibleJobIds] = useState<Record<number, number>>({});
-
+  // ─── Ansible / AWX ───────────────────────────────────────────────────
   async function handleAnsibleCheck(sectionNumber: number, sectionName: string) {
-    if (!clientName.trim()) {
-      alert("Please enter a client name first.");
+    if (!selectedAwxClient) {
+      alert("No AWX client selected. Please wait for clients to load or check your AWX connection.");
       return;
     }
     if (ansibleRunning[sectionNumber]) return;
@@ -507,15 +535,15 @@ export default function ChecklistPage() {
     setAnsibleRunning((prev) => ({ ...prev, [sectionNumber]: true }));
 
     try {
-      // Launch the AWX job
       const launchRes = await apiFetch("/api/checklist/ansible-check", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    section: sectionNumber,
-    clientName: clientName.trim(),
-  }),
-});
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          section: sectionNumber,
+          clientName: selectedAwxClient,
+        }),
+      });
+
       const launchData = await launchRes.json();
 
       if (!launchRes.ok) {
@@ -528,14 +556,10 @@ export default function ChecklistPage() {
         return;
       }
 
-      setAnsibleJobIds((prev) => ({ ...prev, [sectionNumber]: launchData.jobId }));
-
       // Poll for job completion
       const pollInterval = setInterval(async () => {
         try {
-          const statusRes = await apiFetch(
-  `/api/checklist/ansible-check?jobId=${launchData.jobId}`
-);
+          const statusRes = await apiFetch(`/api/checklist/ansible-check?jobId=${launchData.jobId}`);
           const statusData = await statusRes.json();
 
           if (statusData.status === "successful" || statusData.status === "failed") {
@@ -543,18 +567,18 @@ export default function ChecklistPage() {
             setAnsibleRunning((prev) => ({ ...prev, [sectionNumber]: false }));
 
             if (statusData.items && activeId) {
-              // Fetch the LATEST data from DB before merging Ansible results
-              // This prevents overwriting changes made by other users during the Ansible run
+              // Fetch latest DB data before merging to avoid overwriting concurrent changes
               const freshRes = await apiFetch(`/api/checklist/load?id=${activeId}`);
               if (freshRes.ok) {
                 const freshRow = await freshRes.json();
-                const freshData = typeof freshRow.data === "string" ? JSON.parse(freshRow.data) : freshRow.data;
+                const freshData: ChecklistData =
+                  typeof freshRow.data === "string" ? JSON.parse(freshRow.data) : freshRow.data;
                 versionRef.current = freshRow.version ?? null;
 
-                const section = freshData.sections.find((s: ChecklistSection) => s.number === sectionNumber);
+                const section = freshData.sections.find((s) => s.number === sectionNumber);
                 if (section) {
                   for (const ansibleItem of statusData.items) {
-                    const item = section.items.find((i: ChecklistItem) => i.id === ansibleItem.id);
+                    const item = section.items.find((i) => i.id === ansibleItem.id);
                     if (item) {
                       item.status = ansibleItem.status as ChecklistItem["status"];
                       if (ansibleItem.detail) {
@@ -563,7 +587,6 @@ export default function ChecklistPage() {
                     }
                   }
                   setData(freshData);
-                  // Save the merged result
                   doSave(activeId, clientName, clientInfo, freshData);
                 }
               }
@@ -580,14 +603,13 @@ export default function ChecklistPage() {
           clearInterval(pollInterval);
           setAnsibleRunning((prev) => ({ ...prev, [sectionNumber]: false }));
         }
-      }, 3000); // Poll every 3 seconds
+      }, 3000);
 
-      // Safety timeout: stop polling after 5 minutes
+      // Safety timeout: 5 minutes
       setTimeout(() => {
         clearInterval(pollInterval);
         setAnsibleRunning((prev) => ({ ...prev, [sectionNumber]: false }));
       }, 300000);
-
     } catch (err) {
       console.error("Ansible check error:", err);
       alert("Failed to connect to AWX. Make sure AWX is running and accessible.");
@@ -595,12 +617,11 @@ export default function ChecklistPage() {
     }
   }
 
-  // ─── Excel generation (reusable) ─────────────────────────────────────────
+  // ─── Excel generation ─────────────────────────────────────────────────
   async function generateExcelBuffer(checklistData: ChecklistData, name: string, info: ClientInfo): Promise<ArrayBuffer> {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("B2R Checklist");
 
-    // ── Colors matching the PDF ──
     const ORANGE = "F4900C";
     const ORANGE_LIGHT = "F9B233";
     const YELLOW_HEADER = "FFD966";
@@ -626,35 +647,29 @@ export default function ChecklistPage() {
       right: { style: "thin", color: { argb: "FFF4900C" } },
     };
 
-    // ── Column widths ──
     ws.columns = [
-      { width: 5 },   // A: ID number
-      { width: 38 },  // B: Checklist item name
-      { width: 55 },  // C: Description
-      { width: 18 },  // D: Owner
-      { width: 14 },  // E: Status
-      { width: 35 },  // F: Comment
+      { width: 5 },
+      { width: 38 },
+      { width: 55 },
+      { width: 18 },
+      { width: 14 },
+      { width: 35 },
     ];
 
-    // Compute overall progress for avancement
     const allItems = checklistData.sections.flatMap((s) => s.items).filter((i) => i.status !== "na");
     const allDone = allItems.filter((i) => i.status === "done").length;
     const computedOverallProgress = allItems.length > 0 ? Math.round((allDone / allItems.length) * 100) : 0;
 
-    // Section progress helper
     function secProgress(section: ChecklistSection) {
       const applicable = section.items.filter((i) => i.status !== "na");
       if (applicable.length === 0) return 100;
-      const done = applicable.filter((i) => i.status === "done").length;
-      return Math.round((done / applicable.length) * 100);
+      return Math.round((applicable.filter((i) => i.status === "done").length / applicable.length) * 100);
     }
 
     let r = 1;
 
-    // ROW 1: Title bar
     ws.mergeCells(r, 1, r, 6);
-    const titleRow = ws.getRow(r);
-    titleRow.height = 36;
+    ws.getRow(r).height = 36;
     const titleCell = ws.getCell(r, 1);
     titleCell.value = "Check List Build-to-Run";
     titleCell.font = { bold: true, size: 16, color: { argb: `FF${WHITE}` } };
@@ -664,11 +679,10 @@ export default function ChecklistPage() {
       ws.getCell(r, c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${ORANGE}` } };
     }
     r++;
-    // ROW 2: Empty spacer
+
     ws.getRow(r).height = 8;
     r++;
 
-    // Client header
     ws.mergeCells(r, 1, r, 3);
     const clientHeaderCell = ws.getCell(r, 1);
     clientHeaderCell.value = "Client";
@@ -680,7 +694,6 @@ export default function ChecklistPage() {
       ws.getCell(r, c).border = orangeBorder;
     }
 
-    // Avancement header
     ws.mergeCells(r, 4, r, 6);
     const avancementHeaderCell = ws.getCell(r, 4);
     avancementHeaderCell.value = "Avancement";
@@ -694,7 +707,6 @@ export default function ChecklistPage() {
     ws.getRow(r).height = 22;
     r++;
 
-    // Client info rows + Avancement rows
     const clientFields = [
       ["Nom", name],
       ["Offre", info.offre || "—"],
@@ -706,10 +718,13 @@ export default function ChecklistPage() {
     const ownerGroups: Record<string, { done: number; total: number }> = {};
     checklistData.sections.forEach((s) =>
       s.items.forEach((item) => {
-        const key = item.owner.includes("APP") ? "APP Delivery"
-          : item.owner.includes("ARCHITECTURE") ? "NSS Architecture"
-          : item.owner.includes("SECURITY") || item.owner === "SECURITY" ? "Security"
-          : "NSS Delivery";
+        const key = item.owner.includes("APP")
+          ? "APP Delivery"
+          : item.owner.includes("ARCHITECTURE")
+            ? "NSS Architecture"
+            : item.owner.includes("SECURITY") || item.owner === "SECURITY"
+              ? "Security"
+              : "NSS Delivery";
         if (!ownerGroups[key]) ownerGroups[key] = { done: 0, total: 0 };
         if (item.status !== "na") {
           ownerGroups[key].total++;
@@ -724,8 +739,7 @@ export default function ChecklistPage() {
     avancementRows.push({ name: "Total", pct: computedOverallProgress });
 
     for (let i = 0; i < Math.max(clientFields.length, avancementRows.length); i++) {
-      const row = ws.getRow(r);
-      row.height = 18;
+      ws.getRow(r).height = 18;
 
       if (i < clientFields.length) {
         const labelCell = ws.getCell(r, 1);
@@ -733,7 +747,6 @@ export default function ChecklistPage() {
         labelCell.font = { bold: true, size: 9, color: { argb: `FF${BLACK}` } };
         labelCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${GRAY_BG}` } };
         labelCell.border = thinBorder;
-
         ws.mergeCells(r, 2, r, 3);
         const valCell = ws.getCell(r, 2);
         valCell.value = clientFields[i][1];
@@ -751,22 +764,27 @@ export default function ChecklistPage() {
         avNameCell.border = thinBorder;
         avNameCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${GRAY_BG}` } };
         ws.getCell(r, 5).border = thinBorder;
-
         const avPctCell = ws.getCell(r, 6);
         avPctCell.value = `${av.pct}%`;
-        avPctCell.font = { bold: true, size: 9, color: { argb: av.pct === 100 ? `FF${GREEN_TEXT}` : av.pct > 0 ? "FFCC8800" : `FF${RED_TEXT}` } };
-        avPctCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: av.pct === 100 ? `FF${GREEN_FILL}` : av.pct > 0 ? "FFFFF2CC" : `FF${RED_FILL}` } };
+        avPctCell.font = {
+          bold: true,
+          size: 9,
+          color: { argb: av.pct === 100 ? `FF${GREEN_TEXT}` : av.pct > 0 ? "FFCC8800" : `FF${RED_TEXT}` },
+        };
+        avPctCell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: av.pct === 100 ? `FF${GREEN_FILL}` : av.pct > 0 ? "FFFFF2CC" : `FF${RED_FILL}` },
+        };
         avPctCell.alignment = { horizontal: "center" };
         avPctCell.border = thinBorder;
       }
       r++;
     }
 
-    // Spacer
     ws.getRow(r).height = 8;
     r++;
 
-    // "Items checklist" sub-title
     ws.mergeCells(r, 1, r, 6);
     const itemsTitleCell = ws.getCell(r, 1);
     itemsTitleCell.value = "Items checklist";
@@ -779,10 +797,8 @@ export default function ChecklistPage() {
     ws.getRow(r).height = 26;
     r++;
 
-    // Table column headers
     const headers = ["", "CHECKLIST ITEMS", "Description", "OWNER", "Status", "Commentaire"];
-    const headerRow = ws.getRow(r);
-    headerRow.height = 24;
+    ws.getRow(r).height = 24;
     headers.forEach((h, i) => {
       const cell = ws.getCell(r, i + 1);
       cell.value = h;
@@ -798,12 +814,9 @@ export default function ChecklistPage() {
     });
     r++;
 
-    // Section rows + Item rows
     checklistData.sections.forEach((section) => {
       const prog = secProgress(section);
-
-      const sectionRow = ws.getRow(r);
-      sectionRow.height = 24;
+      ws.getRow(r).height = 24;
 
       const numCell = ws.getCell(r, 1);
       numCell.value = section.number;
@@ -833,8 +846,7 @@ export default function ChecklistPage() {
       r++;
 
       section.items.forEach((item) => {
-        const itemRow = ws.getRow(r);
-        itemRow.height = 20;
+        ws.getRow(r).height = 20;
 
         const idCell = ws.getCell(r, 1);
         idCell.value = item.id;
@@ -891,18 +903,15 @@ export default function ChecklistPage() {
       });
     });
 
-    const buffer = await wb.xlsx.writeBuffer();
-    return buffer as ArrayBuffer;
+    return (await wb.xlsx.writeBuffer()) as ArrayBuffer;
   }
 
-  // ─── Excel export (download only) ────────────────────────────────────────
   async function handleExport() {
     if (!data) return;
     const buffer = await generateExcelBuffer(data, clientName, clientInfo);
     saveAs(new Blob([buffer]), `B2R-Checklist-${clientName || "export"}.xlsx`);
   }
 
-  // ─── Save Excel to DB for later use ────────────────────────────────────
   async function handleSaveExcel() {
     if (!data || !activeId) return;
     setSavingExcel(true);
@@ -911,11 +920,8 @@ export default function ChecklistPage() {
       const buffer = await generateExcelBuffer(data, clientName, clientInfo);
       const bytes = new Uint8Array(buffer);
       let binary = "";
-      for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      const excelBase64 = btoa(binary);
-      await doSave(activeId, clientName, clientInfo, data, excelBase64);
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      await doSave(activeId, clientName, clientInfo, data, btoa(binary));
       setExcelSaved(true);
       setTimeout(() => setExcelSaved(false), 3000);
     } catch (err) {
@@ -930,7 +936,7 @@ export default function ChecklistPage() {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b bg-background px-4">
+        <header className="flex h-16 shrink-0 items-center gap-2 border-b bg-slate-50 px-4">
           <SidebarTrigger className="-ml-1" />
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight">B2R Checklist</h1>
@@ -940,7 +946,8 @@ export default function ChecklistPage() {
 
         <div className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 bg-slate-50/40 min-h-screen">
           <div className="max-w-[1600px] mx-auto w-full space-y-6">
-            {/* Top bar: title + actions */}
+
+            {/* ── Top bar ── */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h1 className="text-2xl font-bold text-slate-900">Check List Build-to-Run</h1>
@@ -949,14 +956,10 @@ export default function ChecklistPage() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-3 items-center">
-                {/* Client selector */}
                 {checklists.length > 0 && (
                   <select
                     value={activeId || ""}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      if (id) loadChecklist(id);
-                    }}
+                    onChange={(e) => { if (e.target.value) loadChecklist(e.target.value); }}
                     className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                   >
                     <option value="">Select a checklist...</option>
@@ -978,11 +981,10 @@ export default function ChecklistPage() {
                     <button
                       onClick={handleSaveExcel}
                       disabled={savingExcel}
-                      className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                        excelSaved
-                          ? "bg-green-100 text-green-700 border border-green-300"
-                          : "bg-orange-500 text-white hover:bg-orange-600"
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ${excelSaved
+                        ? "bg-green-100 text-green-700 border border-green-300"
+                        : "bg-orange-500 text-white hover:bg-orange-600"
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                       {savingExcel ? "Saving..." : excelSaved ? "Excel Saved!" : "Save Excel"}
                     </button>
@@ -1003,7 +1005,7 @@ export default function ChecklistPage() {
               </div>
             </div>
 
-            {/* New checklist form */}
+            {/* ── New checklist form ── */}
             {showNewForm && (
               <div className="bg-white rounded-2xl shadow-sm border border-blue-200 p-6 space-y-4">
                 <h2 className="text-lg font-semibold text-slate-900">New Checklist</h2>
@@ -1026,9 +1028,7 @@ export default function ChecklistPage() {
                       className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                     >
                       <option value="">Select...</option>
-                      {OFFRE_OPTIONS.map((o) => (
-                        <option key={o} value={o}>{o}</option>
-                      ))}
+                      {OFFRE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </div>
                   <div>
@@ -1039,9 +1039,7 @@ export default function ChecklistPage() {
                       className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                     >
                       <option value="">Select...</option>
-                      {PRESTATION_OPTIONS.map((o) => (
-                        <option key={o} value={o}>{o}</option>
-                      ))}
+                      {PRESTATION_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </div>
                   <div>
@@ -1052,9 +1050,7 @@ export default function ChecklistPage() {
                       className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                     >
                       <option value="">Select...</option>
-                      {INFRA_OPTIONS.map((o) => (
-                        <option key={o} value={o}>{o}</option>
-                      ))}
+                      {INFRA_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </div>
                   <div>
@@ -1065,9 +1061,7 @@ export default function ChecklistPage() {
                       className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                     >
                       <option value="">Select...</option>
-                      {GOUVERNANCE_OPTIONS.map((o) => (
-                        <option key={o} value={o}>{o}</option>
-                      ))}
+                      {GOUVERNANCE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </div>
                 </div>
@@ -1089,7 +1083,7 @@ export default function ChecklistPage() {
               </div>
             )}
 
-            {/* Loading state */}
+            {/* ── Loading state ── */}
             {loading && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-20 text-center">
                 <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto"></div>
@@ -1097,7 +1091,7 @@ export default function ChecklistPage() {
               </div>
             )}
 
-            {/* Empty state */}
+            {/* ── Empty state ── */}
             {!loading && !activeId && !showNewForm && (
               <div className="bg-white border-2 border-dashed border-slate-300 rounded-2xl p-20 text-center">
                 <div className="max-w-xs mx-auto">
@@ -1112,10 +1106,10 @@ export default function ChecklistPage() {
               </div>
             )}
 
-            {/* Active checklist */}
+            {/* ── Active checklist ── */}
             {!loading && activeId && data && (
               <>
-                {/* Client info card */}
+                {/* Client info + progress row */}
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
                   <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-200 p-6">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1138,23 +1132,18 @@ export default function ChecklistPage() {
                     </div>
                   </div>
 
-                  {/* Active editors presence indicator */}
+                  {/* Active editors */}
                   {activeEditors.length > 0 && (
                     <div className="lg:col-span-3 bg-blue-50 border border-blue-200 rounded-2xl px-4 py-3 flex items-center gap-3">
-                      <div className="flex items-center gap-2">
-                        {/* Animated pulsing dot */}
-                        <span className="relative flex h-3 w-3">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
-                        </span>
-                        <span className="text-sm text-blue-800 font-medium">
-                          {activeEditors.length === 1
-                            ? `${activeEditors[0].user_name} is currently editing this checklist`
-                            : `${activeEditors.map(e => e.user_name).join(", ")} are currently editing this checklist`
-                          }
-                        </span>
-                      </div>
-                      {/* Editor avatars */}
+                      <span className="relative flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                      </span>
+                      <span className="text-sm text-blue-800 font-medium">
+                        {activeEditors.length === 1
+                          ? `${activeEditors[0].user_name} is currently editing this checklist`
+                          : `${activeEditors.map((e) => e.user_name).join(", ")} are currently editing this checklist`}
+                      </span>
                       <div className="flex -space-x-2 ml-auto">
                         {activeEditors.map((editor) => (
                           <div
@@ -1171,7 +1160,7 @@ export default function ChecklistPage() {
                     </div>
                   )}
 
-                  {/* Conflict warning banner */}
+                  {/* Conflict banner */}
                   {conflict && (
                     <div className="lg:col-span-3 bg-amber-50 border border-amber-300 rounded-2xl p-4 flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -1208,7 +1197,59 @@ export default function ChecklistPage() {
                   </div>
                 </div>
 
-                {/* Search */}
+                {/* ── AWX Client Selector ── */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* AWX / Ansible icon */}
+                    <svg className="w-4 h-4 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
+                    </svg>
+                    <span className="text-sm font-semibold text-slate-700">Ansible target:</span>
+                  </div>
+
+                  {loadingClients ? (
+                    <div className="flex items-center gap-2 text-sm text-slate-400">
+                      <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                      </svg>
+                      Loading clients from AWX...
+                    </div>
+                  ) : awxClients.length === 0 ? (
+                    <span className="text-sm text-red-500 flex items-center gap-1">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                        <circle cx="12" cy="12" r="10" /><path d="M12 8v4m0 4h.01" />
+                      </svg>
+                      No AWX clients found — check your AWX connection
+                    </span>
+                  ) : (
+                    <div className="flex gap-2 flex-wrap">
+                      {awxClients.map((c) => (
+                        <button
+                          key={c.id}
+                          onClick={() => setSelectedAwxClient(c.clientName)}
+                          className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-all ${selectedAwxClient === c.clientName
+                            ? "bg-orange-500 text-white border-orange-500 shadow-sm"
+                            : "bg-white text-slate-600 border-slate-300 hover:border-orange-300 hover:text-orange-600"
+                            }`}
+                        >
+                          {c.clientName}
+                          {selectedAwxClient === c.clientName && (
+                            <span className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-white opacity-80 align-middle" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {selectedAwxClient && !loadingClients && (
+                    <span className="ml-auto text-xs text-slate-400 shrink-0">
+                      Ansible checks will run on{" "}
+                      <span className="font-semibold text-slate-600">{selectedAwxClient}</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* ── Search ── */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
                   <input
                     type="text"
@@ -1219,7 +1260,7 @@ export default function ChecklistPage() {
                   />
                 </div>
 
-                {/* Sections */}
+                {/* ── Sections ── */}
                 {filteredSections.map((section) => {
                   const progress = sectionProgress(section);
                   const isCollapsed = collapsedSections.has(section.number);
@@ -1242,9 +1283,8 @@ export default function ChecklistPage() {
                             </div>
                             <div className="mt-1.5 w-full bg-slate-200 rounded-full h-2">
                               <div
-                                className={`h-2 rounded-full transition-all duration-500 ${
-                                  progress === 100 ? "bg-green-500" : progress > 0 ? "bg-blue-500" : "bg-slate-300"
-                                }`}
+                                className={`h-2 rounded-full transition-all duration-500 ${progress === 100 ? "bg-green-500" : progress > 0 ? "bg-blue-500" : "bg-slate-300"
+                                  }`}
                                 style={{ width: `${progress}%` }}
                               />
                             </div>
@@ -1254,26 +1294,32 @@ export default function ChecklistPage() {
                           </span>
                           <svg
                             className={`w-5 h-5 text-slate-400 transition-transform ${isCollapsed ? "" : "rotate-180"}`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor"
                           >
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           </svg>
                         </button>
-                        {/* Ansible check button */}
+
+                        {/* Ansible button */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             handleAnsibleCheck(section.number, section.name);
                           }}
-                          disabled={ansibleRunning[section.number]}
-                          className={`mr-4 px-3 py-1.5 flex items-center gap-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
-                            ansibleRunning[section.number]
-                              ? "bg-orange-100 border border-orange-300 text-orange-500 cursor-wait"
+                          disabled={ansibleRunning[section.number] || !selectedAwxClient || loadingClients}
+                          className={`mr-4 px-3 py-1.5 flex items-center gap-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${ansibleRunning[section.number]
+                            ? "bg-orange-100 border border-orange-300 text-orange-500 cursor-wait"
+                            : !selectedAwxClient || loadingClients
+                              ? "bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed"
                               : "bg-orange-50 border border-orange-200 text-orange-700 hover:bg-orange-100 hover:border-orange-300"
-                          }`}
-                          title={ansibleRunning[section.number] ? `Running Ansible check for ${section.name}...` : `Run Ansible check for ${section.name}`}
+                            }`}
+                          title={
+                            !selectedAwxClient
+                              ? "No AWX client selected"
+                              : ansibleRunning[section.number]
+                                ? `Running check on ${selectedAwxClient}...`
+                                : `Run Ansible check on ${selectedAwxClient}`
+                          }
                         >
                           {ansibleRunning[section.number] ? (
                             <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -1284,7 +1330,11 @@ export default function ChecklistPage() {
                               <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
                             </svg>
                           )}
-                          {ansibleRunning[section.number] ? "Running..." : "Ansible"}
+                          {ansibleRunning[section.number]
+                            ? `Running on ${selectedAwxClient}...`
+                            : selectedAwxClient
+                              ? `Ansible → ${selectedAwxClient}`
+                              : "Ansible"}
                         </button>
                       </div>
 
@@ -1346,7 +1396,7 @@ export default function ChecklistPage() {
               </>
             )}
 
-            {/* Saved checklists grid (when no active checklist) */}
+            {/* ── Saved checklists grid ── */}
             {!loading && !activeId && !showNewForm && checklists.length > 0 && (
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold text-slate-900">Saved Checklists</h2>
@@ -1361,10 +1411,7 @@ export default function ChecklistPage() {
                         <h3 className="font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">{c.clientName}</h3>
                         {c.isOwner && (
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteChecklist(c.id);
-                            }}
+                            onClick={(e) => { e.stopPropagation(); deleteChecklist(c.id); }}
                             className="text-slate-300 hover:text-red-500 transition-colors"
                             title="Delete (owner only)"
                           >
@@ -1398,6 +1445,7 @@ export default function ChecklistPage() {
                 </div>
               </div>
             )}
+
           </div>
         </div>
       </SidebarInset>

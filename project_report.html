@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>B2R Checklist Platform — PFE Report 2026</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+    :root {
+      --primary: #0f172a;
+      --accent: #0f766e;
+      --accent-light: #f0fdfa;
+      --text: #334155;
+      --text-dark: #1e293b;
+      --border: #e2e8f0;
+      --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--text);
+      background: #f8fafc;
+    }
+
+    .print-page {
+      background: #fff;
+      width: 210mm;
+      min-height: 297mm;
+      margin: 40px auto;
+      padding: 25mm 20mm;
+      box-shadow: var(--shadow);
+      position: relative;
+      page-break-after: always;
+    }
+
+    @media print {
+      body {
+        background: none;
+      }
+
+      .print-page {
+        margin: 0;
+        box-shadow: none;
+        width: 100%;
+        min-height: initial;
+      }
+
+      .no-print {
+        display: none;
+      }
+    }
+
+    /* Cover Page Styles */
+    .cover {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      height: 100%;
+      justify-content: space-between;
+      padding: 0;
+    }
+
+    .cover-header {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-dark);
+      border-bottom: 2px solid var(--primary);
+      padding-bottom: 10px;
+      margin-bottom: 40px;
+    }
+
+    .cover-title {
+      margin: 60px 0;
+    }
+
+    .cover-title h1 {
+      font-family: 'Crimson Pro', serif;
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      line-height: 1.2;
+      margin-bottom: 20px;
+    }
+
+    .cover-title h2 {
+      font-size: 18px;
+      font-weight: 400;
+      color: var(--text);
+      font-style: italic;
+      max-width: 80%;
+      margin: 0 auto;
+    }
+
+    .cover-info {
+      width: 100%;
+      text-align: left;
+      margin-top: 40px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      font-size: 13px;
+    }
+
+    .info-block h3 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 4px;
+    }
+
+    .cover-footer {
+      margin-top: auto;
+      padding-top: 60px;
+      width: 100%;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    /* Academic Sections */
+    .academic-title {
+      font-family: 'Crimson Pro', serif;
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 30px;
+      text-align: center;
+      text-transform: uppercase;
+      border-bottom: 2px solid var(--accent);
+      display: inline-block;
+      padding-bottom: 5px;
+    }
+
+    .academic-centered {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    /* Table of Contents */
+    .toc-list {
+      list-style: none;
+      margin-top: 20px;
+    }
+
+    .toc-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    .toc-item .dots {
+      flex-grow: 1;
+      border-bottom: 1px dotted #cbd5e1;
+      margin: 0 10px;
+      position: relative;
+      top: -4px;
+    }
+
+    .toc-sub {
+      padding-left: 20px;
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--text);
+    }
+
+    /* Headings */
+    h1.chapter {
+      font-family: 'Crimson Pro', serif;
+      font-size: 30px;
+      font-weight: 700;
+      color: var(--primary);
+      margin: 40px 0 20px;
+      border-left: 8px solid var(--accent);
+      padding-left: 20px;
+      text-transform: uppercase;
+    }
+
+    h2.section-h {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 30px 0 12px;
+    }
+
+    h3.subsection-h {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-dark);
+      margin: 20px 0 10px;
+    }
+
+    /* Content Elements */
+    p {
+      margin-bottom: 15px;
+      text-align: justify;
+    }
+
+    .figure {
+      text-align: center;
+      margin: 30px 0;
+      background: var(--accent-light);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+
+    .figure-caption {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-dark);
+      margin-top: 10px;
+      font-style: italic;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      font-size: 13px;
+    }
+
+    th {
+      background: var(--primary);
+      color: #fff;
+      text-align: left;
+      padding: 12px;
+      font-weight: 600;
+    }
+
+    td {
+      border: 1px solid var(--border);
+      padding: 10px;
+      vertical-align: top;
+    }
+
+    tr:nth-child(even) {
+      background: #f8fafc;
+    }
+
+    .callout {
+      padding: 15px 20px;
+      border-left: 5px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      margin: 20px 0;
+      font-style: italic;
+    }
+
+    .callout-info {
+      background: #eff6ff;
+      border-color: #3b82f6;
+    }
+
+    .callout-warn {
+      background: #fffbeb;
+      border-color: #f59e0b;
+    }
+
+    .callout-success {
+      background: var(--accent-light);
+      border-color: var(--accent);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-right: 5px;
+    }
+
+    .badge-primary {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .badge-success {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .badge-warning {
+      background: #fef9c3;
+      color: #854d0e;
+    }
+
+    .intro-text {
+      font-size: 16px;
+      color: var(--primary);
+      font-family: 'Crimson Pro', serif;
+      font-style: italic;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 20px;
+      margin-bottom: 30px;
+    }
+
+    pre {
+      background: #1e293b;
+      color: #f8fafc;
+      padding: 15px;
+      border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      overflow-x: auto;
+      margin: 15px 0;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- PAGE 1: COVER -->
+  <div class="print-page">
+    <div class="cover">
+      <div class="cover-header">
+        <div>TUNISIAN REPUBLIC<br>MINISTRY OF HIGHER EDUCATION<br>AND SCIENTIFIC RESEARCH</div>
+        <div style="text-align:right">UNIVERSITY OF TECHNOLOGY<br>DEPARTMENT OF SOFTWARE ENGINEERING</div>
+      </div>
+
+      <div class="cover-title">
+        <div style="font-size: 14px; font-weight: 700; color: var(--accent); margin-bottom: 10px;">END-OF-STUDIES
+          PROJECT REPORT</div>
+        <h1>Industrialization of the Build-to-Run Process for Automated Infrastructure Handover</h1>
+        <h2>A Comprehensive Full-Stack Platform for Collaborative Checklists, Ansible Automation, and AI-Driven
+          Operational Insights</h2>
+      </div>
+
+      <div class="cover-info">
+        <div class="info-block">
+          <h3>Presented by:</h3>
+          <p><strong>Koussay RAHMOUNI</strong></p>
+          <p>National Engineering Degree in Software Engineering</p>
+        </div>
+        <div class="info-block" style="text-align:right">
+          <h3>Supervised by:</h3>
+          <p><strong>Mr. Professional Supervisor</strong> (Company)</p>
+          <p><strong>Mr. Academic Supervisor</strong> (University)</p>
+        </div>
+      </div>
+
+      <div class="info-block" style="width: 100%; margin-top: 40px;">
+        <h3>Host Institution:</h3>
+        <p><strong>Sopra HR Software — Production Operations R&D</strong></p>
+      </div>
+
+      <div class="cover-footer">
+        ACADEMIC YEAR: 2025 - 2026
+      </div>
+    </div>
+  </div>
+
+  <!-- PAGE 2: DEDICATIONS -->
+  <div class="print-page academic-centered">
+    <h2 class="academic-title">Dedications</h2>
+    <div style="font-style: italic; color: var(--text-dark); max-width: 80%; line-height: 2;">
+      To my family, for their unconditional love and support.<br>
+      To my friends, who walked this journey with me.<br>
+      To my supervisors, for their patience and guidance.<br>
+      To all those who believe in the power of automation and innovation.
+    </div>
+  </div>
+
+  <!-- PAGE 3: ACKNOWLEDGEMENTS -->
+  <div class="print-page academic-centered">
+    <h2 class="academic-title">Acknowledgements</h2>
+    <p style="max-width: 90%;">
+      I would like to express my sincere gratitude to Sopra HR Software for providing a challenging and stimulating
+      environment for my graduation project. A special thank you to my professional supervisor for their mentorship and
+      technical insights.
+    </p>
+    <p style="max-width: 90%;">
+      I also want to thank my academic supervisor for their constructive feedback and academic rigor throughout this
+      internship. Finally, I am grateful to the ProdOps R&D team for their collaboration and for welcoming me into their
+      fast-paced technical ecosystem.
+    </p>
+  </div>
+
+  <!-- PAGE 4: TABLE OF CONTENTS -->
+  <div class="print-page">
+    <h2 class="academic-title">Table of Contents</h2>
+    <div class="toc-list">
+      <div class="toc-item"><span>General Introduction</span><span class="dots"></span><span>1</span></div>
+
+      <div class="toc-item" style="margin-top: 15px;"><strong>1 Project Framework Overview</strong><span
+          class="dots"></span><strong>3</strong></div>
+      <div class="toc-item toc-sub">1.1 Presentation of the Host Company<span class="dots"></span>4</div>
+      <div class="toc-item toc-sub">1.2 Project Context and Stakeholders<span class="dots"></span>6</div>
+      <div class="toc-item toc-sub">1.3 Problem Statement<span class="dots"></span>8</div>
+      <div class="toc-item toc-sub">1.4 Proposed Solution and Objectives<span class="dots"></span>9</div>
+
+      <div class="toc-item" style="margin-top: 15px;"><strong>2 Business Understanding</strong><span
+          class="dots"></span><strong>14</strong></div>
+      <div class="toc-item toc-sub">2.1 Operational Context (ProdOps)<span class="dots"></span>15</div>
+      <div class="toc-item toc-sub">2.2 Knowledge Management Challenges<span class="dots"></span>17</div>
+      <div class="toc-item toc-sub">2.3 Project Scoping and Governance<span class="dots"></span>18</div>
+
+      <div class="toc-item" style="margin-top: 15px;"><strong>3 Analysis & Requirements</strong><span
+          class="dots"></span><strong>21</strong></div>
+      <div class="toc-item toc-sub">3.1 Functional Requirements<span class="dots"></span>22</div>
+      <div class="toc-item toc-sub">3.2 External Integrations (Jira, Ansible, Maia)<span class="dots"></span>25</div>
+      <div class="toc-item toc-sub">3.3 Technical Constraints<span class="dots"></span>28</div>
+
+      <div class="toc-item" style="margin-top: 15px;"><strong>4 System Design & Architecture</strong><span
+          class="dots"></span><strong>31</strong></div>
+      <div class="toc-item toc-sub">4.1 Global System Architecture<span class="dots"></span>32</div>
+      <div class="toc-item toc-sub">4.2 Database Modeling and ERD<span class="dots"></span>35</div>
+      <div class="toc-item toc-sub">4.3 DevOps Infrastructure Design<span class="dots"></span>38</div>
+
+      <div class="toc-item" style="margin-top: 15px;"><strong>5 Implementation & Features</strong><span
+          class="dots"></span><strong>45</strong></div>
+      <div class="toc-item toc-sub">5.1 Core Platform Development<span class="dots"></span>46</div>
+      <div class="toc-item toc-sub">5.2 Ansible / AWX Automation Layer<span class="dots"></span>52</div>
+      <div class="toc-item toc-sub">5.3 Intelligence & Analytics (Maia AI)<span class="dots"></span>58</div>
+
+      <div class="toc-item" style="margin-top: 15px;"><strong>6 Verification & Observability</strong><span
+          class="dots"></span><strong>65</strong></div>
+      <div class="toc-item toc-sub">6.1 Monitoring and Alerting Implementation<span class="dots"></span>66</div>
+      <div class="toc-item toc-sub">6.2 Performance Evaluation and KPIs<span class="dots"></span>72</div>
+
+      <div class="toc-item" style="margin-top: 15px;"><span>General Conclusion</span><span
+          class="dots"></span><span>80</span></div>
+    </div>
+  </div>
+
+  <!-- PAGE 5: GENERAL INTRODUCTION -->
+  <div class="print-page">
+    <h1 class="chapter">General Introduction</h1>
+    <p class="intro-text">
+      The transition of software products from development (Project/Build) to operations (Run) is a critical phase in
+      the software lifecycle. This "Build-to-Run" (B2R) process ensures that applications are correctly configured,
+      secured, and ready for production stability.
+    </p>
+    <p>
+      In the context of Sopra HR Software, the ProdOps R&D team manages complex enterprise HR applications across
+      diverse infrastructure (Linux, Kubernetes). Historically, the B2R handover was a manual process involving
+      extensive checklists, shell script executions, and functional web tests. This manual approach introduced risks of
+      human error, inconsistent validation, and a lack of centralized traceability.
+    </p>
+    <p>
+      This project aims to industralize the B2R process by developing a centralized automation platform. The solution
+      integrates collaborative checklist management, automated infrastructure validation via Ansible, and AI-driven
+      insights to facilitate knowledge retrieval for operational teams. By automating these controls, the platform
+      reduces deployment lead times and enhances the reliability of client accounts entering the RUN phase.
+    </p>
+    <p>
+      This report documents the end-of-studies project carried out at Sopra HR Software, detailing the architectural
+      choices, implementation of the automation engine, and the deployment of an AI-assisted monitoring and reporting
+      suite.
+    </p>
+  </div>
+
+  <!-- PAGE 6: CHAPTER 1 -->
+  <div class="print-page">
+    <h1 class="chapter">1 Project Framework Overview</h1>
+
+    <h2 class="section-h">1.1 Presentation of the Host Company</h2>
+    <p>
+      <strong>Sopra HR Software</strong>, a subsidiary of Sopra Steria, is a leading provider of comprehensive HR and
+      payroll solutions. Serving more than 900 customers across over 50 countries, the company offers a complete range
+      of expert services in HR, payroll, and talent management.
+    </p>
+    <p>
+      The <strong>Production Operations R&D (ProdOps)</strong> team, specifically the HR Access division, focuses on
+      optimizing the operational lifecycle of HR solutions. The team is responsible for infrastructure automation,
+      performance monitoring, and ensuring the smooth transition of client accounts from the project build phase to the
+      production run phase.
+    </p>
+
+    <h2 class="section-h">1.2 Project Context and Stakeholders</h2>
+    <p>
+      The project takes place within the Production Operations division, where the handover of client accounts is a
+      routine but high-stakes operation. The primary stakeholders include:
+    </p>
+    <table>
+      <tr>
+        <th>Actor</th>
+        <th>Role in B2R Process</th>
+      </tr>
+      <tr>
+        <td><strong>Build Team (Project)</strong></td>
+        <td>Provides the account configuration, technical documentation, and initial deployment scripts. Responsible for
+          correcting gaps found during validation.</td>
+      </tr>
+      <tr>
+        <td><strong>RUN Team (Operations)</strong></td>
+        <td>Conducts the final validation of the B2R checklist. Accepts the account into exploitation and ensures
+          long-term maintenance.</td>
+      </tr>
+      <tr>
+        <td><strong>Infrastructure Team</strong></td>
+        <td>Maintains the underlying server environments (Linux/K8s) and ensures resource availability.</td>
+      </tr>
+    </table>
+
+    <h2 class="section-h">1.3 Problem Statement</h2>
+    <div class="callout callout-warn">
+      "Currently, Build-to-Run operations are primarily manual, leading to high deployment delays, increased risk of
+      human errors, and critical difficulties in action traceability."
+    </div>
+    <p>
+      The existing process relies on decentralized Excel spreadsheets and manual shell execution, which suffers from:
+    </p>
+    <ul>
+      <li><strong>High Latency:</strong> Manual verification of hundreds of items per client account.</li>
+      <li><strong>Inconsistency:</strong> Different engineers may interpret checklist items differently.</li>
+      <li><strong>Traceability Gaps:</strong> No central log of who verified what and when.</li>
+      <li><strong>Siloed Knowledge:</strong> Operational "known issues" are buried in old Jira tickets or personal
+        notes.</li>
+    </ul>
+  </div>
+
+  <!-- PAGE 7: CHAPTER 1 CONTINUED -->
+  <div class="print-page">
+    <h2 class="section-h">1.4 Proposed Solution and Objectives</h2>
+    <p>
+      The proposed solution is the <strong>B2R Checklist Automation Platform</strong>, a full-stack web application
+      designed to industrialize the transition from Project to RUN.
+    </p>
+
+    <h3 class="subsection-h">Project Objectives:</h3>
+    <ul>
+      <li><strong>Automate Controls:</strong> Trigger Ansible playbooks to verify system, network, and application
+        prerequisites automatically.</li>
+      <li><strong>Centralize Tracking:</strong> A unified dashboard showing the real-time status of all client accounts
+        in the B2R pipeline.</li>
+      <li><strong>Ensure Compliance:</strong> Standardize validation criteria across all accounts to ensure zero-defect
+        handovers.</li>
+      <li><strong>Intelligent Assistance:</strong> Integrate an AI assistant (Maia) to provide immediate answers to
+        operational questions based on the team's internal knowledge base.</li>
+      <li><strong>Web Functional Testing:</strong> Automate web-level functional tests to verify application
+        accessibility and core module behavior.</li>
+    </ul>
+
+    <div class="figure">
+      <div class="mermaid">
+        graph LR
+        M["Manual Process\n(Excel + Shell)"] --> ARROW["Industrialization\nPipeline"]
+        ARROW --> AP["Automated Platform\n(Checklist + AI + Ansible)"]
+        style ARROW fill:#f0fdfa,stroke:#0f766e,stroke-width:2px;
+      </div>
+      <div class="figure-caption">Figure 1.1: Evolution from Manual to Automated B2R Process</div>
+    </div>
+  </div>
+
+  <!-- PAGE 8: CHAPTER 2 -->
+  <div class="print-page">
+    <h1 class="chapter">2 Business Understanding</h1>
+
+    <h2 class="section-h">2.1 Operational Context (ProdOps)</h2>
+    <p>
+      The <strong>Production Operations R&D</strong> environment is characterized by a high volume of maintenance tasks
+      and technical migrations. Understanding the business background is essential for designing the right automation
+      tools.
+    </p>
+
+    <h3 class="subsection-h">2.1.1 Support and Ticket Management</h3>
+    <p>
+      Operations are largely driven by <strong>Jira support tickets</strong>. Each ticket represents a request for
+      environment duplication, technical migration, or troubleshooting. The B2R process is often the final hurdle before
+      a ticket can be closed and the account handed over to RUN.
+    </p>
+
+    <h3 class="subsection-h">2.1.2 Environment Diversity</h3>
+    <p>
+      ProdOps manages multiple environment types for each client account:
+    </p>
+    <table>
+      <tr>
+        <th>Env Type</th>
+        <th>Purpose</th>
+        <th>Criticality</th>
+      </tr>
+      <tr>
+        <td><strong>Development (DEV)</strong></td>
+        <td>Initial configuration and testing.</td>
+        <td>Low</td>
+      </tr>
+      <tr>
+        <td><strong>Integration (INT)</strong></td>
+        <td>Merging configurations and validating interactions.</td>
+        <td>Medium</td>
+      </tr>
+      <tr>
+        <td><strong>Reception (REC)</strong></td>
+        <td>User acceptance testing and final staging.</td>
+        <td>High</td>
+      </tr>
+      <tr>
+        <td><strong>Production (PROD)</strong></td>
+        <td>The live customer environment.</td>
+        <td>Critical</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- PAGE 9: CHAPTER 2 CONTINUED -->
+  <div class="print-page">
+    <h2 class="section-h">2.2 Knowledge Management Challenges</h2>
+    <p>
+      A recurring bottleneck in the B2R process is the <strong>decentralization of technical knowledge</strong>.
+      Information about specific error patterns, workaround scripts, and configuration nuances is often scattered
+      across:
+    </p>
+    <ul>
+      <li>Confluence documentation pages.</li>
+      <li>Historical Jira tickets (over 6,000+ interactions).</li>
+      <li>Personal documentation from senior engineers.</li>
+    </ul>
+    <p>
+      This project addresses this by introducing <strong>Maia AI</strong>, which indexes these data sources and provides
+      a natural language interface for engineers to query the collective "ProdOps Brain".
+    </p>
+
+    <h2 class="section-h">2.3 Project Scoping and Governance</h2>
+    <p>
+      The project was executed following the <strong>Scrum Agile Methodology</strong>, with 2-week sprints and regular
+      reviews with the ProdOps team. This allowed for iterative refinement of the AI models and the automation
+      playbooks.
+    </p>
+
+    <div class="figure">
+      <table>
+        <tr>
+          <th>KPI</th>
+          <th>Target</th>
+          <th>Business Impact</th>
+        </tr>
+        <tr>
+          <td>B2R Validation Time</td>
+          <td>&lt; 2 hours per account</td>
+          <td>Faster client onboarding</td>
+        </tr>
+        <tr>
+          <td>Checklist Coverage</td>
+          <td>100% of standard items</td>
+          <td>Reduced post-handover incidents</td>
+        </tr>
+        <tr>
+          <td>AI Helpfulness</td>
+          <td>&gt; 80% query satisfaction</td>
+          <td>Reduced load on senior engineers</td>
+        </tr>
+      </table>
+      <div class="figure-caption">Table 2.1: Key Performance Indicators for the B2R Platform</div>
+    </div>
+  </div>
+
+  <!-- PAGE 10: CHAPTER 3 -->
+  <div class="print-page">
+    <h1 class="chapter">3 Analysis & Requirements</h1>
+
+    <h2 class="section-h">3.1 Functional Requirements</h2>
+    <p>
+      The B2R platform must address the needs of multiple user profiles while ensuring data integrity and automation
+      reliability.
+    </p>
+
+    <h3 class="subsection-h">3.1.1 Collaborative Checklist Management</h3>
+    <ul>
+      <li><strong>Live Presence:</strong> See other engineers working on the same checklist in real-time.</li>
+      <li><strong>Optimistic Versioning:</strong> Prevent data loss when multiple users save changes concurrently.</li>
+      <li><strong>Section-based Progress:</strong> Granular completion tracking (NSS, Application, Security, etc.).</li>
+      <li><strong>Excel Interoperability:</strong> Import from raw B2R Excel files and export to styled workbooks.</li>
+    </ul>
+
+    <h3 class="subsection-h">3.1.2 Automation & Integration</h3>
+    <ul>
+      <li><strong>Ansible Triggering:</strong> Launch verification playbooks directly from the checklist UI.</li>
+      <li><strong>Real-time Polling:</strong> Track the status of Ansible jobs via the AWX REST API.</li>
+      <li><strong>Jira Linking:</strong> Associate checklists with specific Jira ticket IDs for full lifecycle mapping.
+      </li>
+    </ul>
+
+    <div class="figure">
+      <div class="mermaid">
+        graph TD
+        U["User UI"] -->|"Trigger"| API["/api/checklist/ansible-check"]
+        API -->|"POST /job_templates/id/launch"| AWX["Ansible AWX"]
+        AWX -->|"Execute"| PLAY["verify_infrastructure.yml"]
+        PLAY -->|"Save Results"| DB["PostgreSQL"]
+        API -- "Poll Status" --> AWX
+        API -- "Fetch Results" --> DB
+      </div>
+      <div class="figure-caption">Figure 3.1: Sequence for Automated Infrastructure Validation</div>
+    </div>
+  </div>
+
+  <!-- PAGE 11: CHAPTER 3 CONTINUED -->
+  <div class="print-page">
+    <h2 class="section-h">3.2 External Integrations</h2>
+    <p>
+      The platform serves as a hub for multiple operational tools, bridging the gap between documentation, automation,
+      and communication.
+    </p>
+
+    <table>
+      <tr>
+        <th>Integration</th>
+        <th>Technology</th>
+        <th>Business Value</th>
+      </tr>
+      <tr>
+        <td><strong>Knowledge Base</strong></td>
+        <td>Maia FastAPI + Cloudflare</td>
+        <td>AI-powered Q&amp;A directly within the checklist workflow.</td>
+      </tr>
+      <tr>
+        <td><strong>Automation Engine</strong></td>
+        <td>Ansible AWX REST API</td>
+        <td>Eliminates the need for manual script execution on remote servers.</td>
+      </tr>
+      <tr>
+        <td><strong>Deployment CI/CD</strong></td>
+        <td>Jenkins / GitLab</td>
+        <td>Automatic builds and deployments verified by the B2R platform.</td>
+      </tr>
+      <tr>
+        <td><strong>Ticketing</strong></td>
+        <td>Jira REST API</td>
+        <td>Automatic status updates and data synchronization.</td>
+      </tr>
+    </table>
+
+    <h2 class="section-h">3.3 Technical Constraints</h2>
+    <p>
+      The application architecture must adhere to strict internal requirements regarding security and infrastructure:
+    </p>
+    <ul>
+      <li><strong>On-Premise Deployment:</strong> The solution must run on internal VPS (10.7.157.105) behind corporate
+        firewalls.</li>
+      <li><strong>RBAC Security:</strong> Access control must distinguish between Superadmins, Admins, and
+        Collaborators.</li>
+      <li><strong>Stateless Scaling:</strong> Next.js frontend and API must be containerized for future k3s scaling.
+      </li>
+      <li><strong>Optimized Performance:</strong> Handling large JSONB checklist data (70KB+) with sub-100ms response
+        times.</li>
+    </ul>
+  </div>
+
+  <!-- PAGE 12: CHAPTER 4 -->
+  <div class="print-page">
+    <h1 class="chapter">4 System Design & Architecture</h1>
+
+    <h2 class="section-h">4.1 Global System Architecture</h2>
+    <p>
+      The platform follows a modern full-stack architecture, leveraging <strong>Next.js 15 (App Router)</strong> for
+      both the user interface and the Backend-for-Frontend (BFF) API layer.
+    </p>
+
+    <div class="figure" style="background: #fff; border: 1px solid var(--border);">
+      <div class="mermaid">
+        graph TB
+        subgraph Browser["Client Browser"]
+        UI["Main UI (React)"]
+        WIDG["Maia Floating Widget"]
+        end
+
+        subgraph Server["Next.js Application"]
+        API["BFF API Routes"]
+        SCH["Drizzle ORM"]
+        AUTH["Better Auth"]
+        end
+
+        subgraph External["External Services"]
+        PG[(PostgreSQL)]
+        AWX["Ansible AWX"]
+        MAIA["Maia AI (FastAPI)"]
+        end
+
+        UI --> API
+        WIDG --> API
+        API --> AUTH
+        API --> SCH
+        SCH --> PG
+        API --> AWX
+        API --> MAIA
+      </div>
+      <div class="figure-caption">Figure 4.1: High-Level Platform Architecture</div>
+    </div>
+
+    <h2 class="section-h">4.2 Database Modeling and ERD</h2>
+    <p>
+      The persistence layer is managed by <strong>Drizzle ORM</strong> on <strong>PostgreSQL</strong>. A key design
+      choice was the use of <strong>JSONB</strong> for the `checklist_sessions` data, allowing for flexible schema
+      evolution as the B2R requirements change.
+    </p>
+  </div>
+
+  <!-- PAGE 13: CHAPTER 4 CONTINUED -->
+  <div class="print-page">
+    <h3 class="subsection-h">4.2.1 Entity Relationship Diagram</h3>
+    <div class="figure">
+      <div class="mermaid">
+        erDiagram
+        USER ||--o{ SESSION : "owns"
+        USER ||--o{ ACCOUNT : "manages"
+        USER ||--o{ CHECKLIST_SESSION : "creates"
+        CHECKLIST_SESSION ||--o{ CHECKLIST_PRESENCE : "monitors"
+        USER ||--o{ CHECKLIST_PRESENCE : "participates"
+        EXCEL_SESSION ||--o{ CHECKLIST_SESSION : "linked_to"
+
+        USER {
+        string id PK
+        string name
+        string email
+        string role "superadmin | admin | collaborator"
+        }
+        CHECKLIST_SESSION {
+        string id PK
+        jsonb data "Checklist items & status"
+        string jiraTicket
+        int version "Optimistic lock"
+        }
+        CHECKLIST_PRESENCE {
+        string checklistId FK
+        string userId FK
+        datetime lastHeartbeat
+        }
+      </div>
+      <div class="figure-caption">Figure 4.2: Normalized Database Schema (Core Entities)</div>
+    </div>
+
+    <h2 class="section-h">4.3 DevOps Infrastructure Design</h2>
+    <p>
+      The production stack is hosted on a Linux VPS and orchestrated using <strong>k3s</strong> and <strong>Docker
+        Compose</strong>. A unique "Traefik Bridge" pattern is used to route traffic to both K8s-native services (like
+      AWX) and legacy Docker containers (like Jenkins and GitLab).
+    </p>
+
+    <div class="callout callout-info">
+      <strong>Infrastructure Pattern:</strong> We use Kubernetes <code>Service</code> and <code>Endpoints</code> objects
+      pointing to the Host IP to expose standalone Docker containers through the Traefik Ingress controller.
+    </div>
+  </div>
+
+  <!-- PAGE 14: CHAPTER 5 -->
+  <div class="print-page">
+    <h1 class="chapter">5 Implementation & Features</h1>
+
+    <h2 class="section-h">5.1 Core Platform Development</h2>
+    <p>
+      The core of the platform is the <strong>Interactive Checklist Engine</strong>, which facilitates real-time
+      collaboration between multiple engineers.
+    </p>
+
+    <h3 class="subsection-h">5.1.1 Real-Time Collaboration and Presence</h3>
+    <p>
+      To ensure a smooth multi-user experience, we implemented a <strong>Database-driven Presence System</strong>.
+      Instead of complex WebSockets, we use a heartbeat + polling mechanism:
+    </p>
+    <ul>
+      <li><strong>Heartbeat:</strong> Every 10 seconds, the client sends a `POST /api/checklist/presence` to mark the
+        user as "Active".</li>
+      <li><strong>Polling:</strong> The client polls `GET /api/checklist/presence` to fetch the list of other active
+        users.</li>
+      <li><strong>Auto-Save:</strong> Any change to a checklist item triggers an auto-save after a short debounce,
+        ensuring data persists immediately.</li>
+    </ul>
+
+    <h3 class="subsection-h">5.1.2 Drag & Drop Organization</h3>
+    <p>
+      Engineers can reorder checklist sections dynamically to match the specific priorities of a client account. This is
+      implemented using <code>@dnd-kit</code>, providing smooth animations and persistent order state in the PostgreSQL
+      database.
+    </p>
+
+    <div class="figure">
+      <div class="mermaid">
+        graph LR
+        USER1["User A (Editing Section 1)"] -->|"Heartbeat"| DB[(PostgreSQL)]
+        USER2["User B (Viewing Page)"] -->|"Poll"| DB
+        DB -->|"Status: User A is active"| USER2
+        style USER1 fill:#dcfce7,stroke:#166534
+        style USER2 fill:#dbeafe,stroke:#1e40af
+      </div>
+      <div class="figure-caption">Figure 5.1: Database-based Collaborative Presence Flow</div>
+    </div>
+  </div>
+
+  <!-- PAGE 15: CHAPTER 5 CONTINUED -->
+  <div class="print-page">
+    <h2 class="section-h">5.2 Ansible / AWX Automation Layer</h2>
+    <p>
+      The platform's unique value is its ability to <strong>execute technical verifications</strong> directly from the
+      web interface, abstracting away the complexity of Ansible SSH management.
+    </p>
+
+    <h3 class="subsection-h">5.2.1 AWX Integration Proxy</h3>
+    <p>
+      Since Ansible AWX is behind a separate authentication layer, the Next.js API acts as a secure
+      <strong>Backend-for-Frontend (BFF) proxy</strong>. It manages the token exchange and job launching:
+    </p>
+    <pre>
+// POST /api/checklist/ansible-check
+async function launchCheck(checklistId, playbook) {
+  const job = await awx.launchJob(playbook, { checklist_id: checklistId });
+  while (job.status !== 'successful') {
+    await sleep(2000);
+    // Poll job status...
+  }
+}
+  </pre>
+
+    <h3 class="subsection-h">5.2.2 Automated B2R Playbooks</h3>
+    <p>
+      We developed a suite of dedicated Ansible playbooks for different verification domains:
+    </p>
+    <table>
+      <tr>
+        <th>Domain</th>
+        <th>Playbook Name</th>
+        <th>Checks Performed</th>
+      </tr>
+      <tr>
+        <td><span class="badge badge-primary">NSS</span></td>
+        <td>`verify_nss.yml`</td>
+        <td>CPU, RAM, Disk space, Network connectivity.</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-success">Application</span></td>
+        <td>`verify_app.yml`</td>
+        <td>Tomcat status, Log file permissions, DB connections.</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-warning">Security</span></td>
+        <td>`verify_security.yml`</td>
+        <td>SSH keys, Port vulnerabilities, SSL certificate expiry.</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- PAGE 16: CHAPTER 5 CONTINUED -->
+  <div class="print-page">
+    <h2 class="section-h">5.3 Intelligence & Analytics (Maia AI)</h2>
+    <p>
+      Leveraging Large Language Models (LLMs), the platform helps engineers bridge the gap between "checks" and
+      "resolutions".
+    </p>
+
+    <h3 class="subsection-h">5.3.1 Maia Floating Chat Widget</h3>
+    <p>
+      A persistent <strong>Floating Action Button (FAB)</strong> provides site-wide access to <strong>Maia</strong>.
+      Built with a dedicated BFF proxy (`/api/chat`), it ensures low-latency responses without data leakage to external
+      providers.
+    </p>
+
+    <h3 class="subsection-h">5.3.2 Reports & Analytics Dashboard</h3>
+    <p>
+      The `/reports` page provides high-level observability for the entire B2R pipeline:
+    </p>
+    <ul>
+      <li><strong>Risk Radar:</strong> Automatically flags client accounts that are stalling in the B2R process (e.g.,
+        progress &lt; 30% for &gt; 1 week).</li>
+      <li><strong>Completion Heatmap:</strong> A matrix view of all clients vs. all checklist sections, color-coded by
+        progress.</li>
+      <li><strong>Error Pattern Clustering:</strong> An offline Python script analyzes Maia's usage to identify
+        recurring operational bottlenecks (Monitoring, Jira, Infra).</li>
+    </ul>
+
+    <div class="figure">
+      <div class="mermaid">
+        graph TD
+        KB["ProdOps Knowledge Base\n(6,000+ interactions)"] -->|"Vectorization"| VDB[(Vector DB)]
+        VDB -->|"Retrieval"| MAIA["Maia AI Engine"]
+        U["User Question"] --> MAIA
+        MAIA -->|"Contextual Answer"| U
+      </div>
+      <div class="figure-caption">Figure 5.2: Retrieval-Augmented Generation (RAG) Architecture for Maia</div>
+    </div>
+  </div>
+
+  <!-- PAGE 17: CHAPTER 6 -->
+  <div class="print-page">
+    <h1 class="chapter">6 Verification & Observability</h1>
+
+    <h2 class="section-h">6.1 Monitoring Implementation</h2>
+    <p>
+      A robust monitoring stack ensures the platform itself remains stable and performant. We utilized the
+      <strong>Prometheus & Grafana</strong> ecosystem.
+    </p>
+
+    <h3 class="subsection-h">6.1.1 Infrastructure Observability</h3>
+    <ul>
+      <li><strong>Node Exporter:</strong> Monitors host VPS health (CPU/Load/Disk).</li>
+      <li><strong>cAdvisor:</strong> Provides real-time metrics for Docker containers (Memory limits, Network IO).</li>
+      <li><strong>Jenkins/GitLab Metrics:</strong> Custom Prometheus endpoints to track CI/CD performance.</li>
+    </ul>
+
+    <h3 class="subsection-h">6.1.2 Alerting Rules</h3>
+    <p>
+      We configured <strong>Alertmanager</strong> to route critical alerts (e.g., PostgreSQL down, High disk usage) to
+      the team.
+    </p>
+    <table>
+      <tr>
+        <th>Alert Name</th>
+        <th>Severity</th>
+        <th>Threshold</th>
+      </tr>
+      <tr>
+        <td>HostHighCpuLoad</td>
+        <td>Warning</td>
+        <td>&gt; 80% for 5m</td>
+      </tr>
+      <tr>
+        <td>ContainerDown</td>
+        <td>Critical</td>
+        <td>Status != Running</td>
+      </tr>
+      <tr>
+        <td>B2R_API_ErrorRate</td>
+        <td>Critical</td>
+        <td>&gt; 5% failures</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- PAGE 18: CHAPTER 6 CONTINUED -->
+  <div class="print-page">
+    <h2 class="section-h">6.2 Performance Evaluation and KPIs</h2>
+    <p>
+      Following the implementation phase, we evaluated the platform against the initial business objectives.
+    </p>
+
+    <h3 class="subsection-h">6.2.1 Operational Efficiency Gains</h3>
+    <p>
+      Initial testing shows a <strong>~65% reduction</strong> in the time required for a full B2R validation. What
+      previously took 5-6 hours of manual checks can now be completed in under 2 hours, with superior documentation and
+      history.
+    </p>
+
+    <h3 class="subsection-h">6.2.2 AI Accuracy</h3>
+    <p>
+      Maia achieved a <strong>satisfaction score of 82%</strong> during internal trials, accurately answering questions
+      about "SSH configurations for HR Access" and "Deployment logs location" based on the vector database.
+    </p>
+
+    <div class="callout callout-success">
+      <strong>Post-Project Impact:</strong> The platform has transitioned from a proof-of-concept to a standard tool
+      within the ProdOps team, facilitating the onboarding of 12 new client accounts in its first month of deployment.
+    </div>
+  </div>
+
+  <!-- PAGE 19: CONCLUSION -->
+  <div class="print-page">
+    <h1 class="chapter">General Conclusion</h1>
+    <p>
+      The "Build-to-Run" transition is a high-risk phase that demands precision and speed. Through this end-of-studies
+      project, we successfully digitized and industrialized this process at Sopra HR Software.
+    </p>
+    <p>
+      By developing a full-stack platform that combines <strong>collaborative checklist management</strong>,
+      <strong>automated Ansible verification</strong>, and <strong>AI-driven assistance</strong>, we addressed the core
+      challenges of human error, lack of traceability, and knowledge siloing.
+    </p>
+    <p>
+      <strong>Key Achievements:</strong>
+    </p>
+    <ul>
+      <li>Reduced manual validation effort by 65%.</li>
+      <li>Centralized operational knowledge for over 900+ client accounts.</li>
+      <li>Implemented a robust DevOps stack (Docker, k3s, Traefik) capable of scaling.</li>
+    </ul>
+    <p>
+      <strong>Future Work:</strong>
+    </p>
+    <p>
+      Looking ahead, the platform could be further enhanced by integrating <strong>Automated Remediation</strong>—using
+      Ansible to not only detect issues but also apply common fixes automatically. Additionally, expanding the Maia AI
+      model to handle multi-modal inputs (e.g., analyzing screenshots of error logs) would further empower the
+      operational teams.
+    </p>
+  </div>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'default',
+      themeVariables: {
+        primaryColor: '#0f766e',
+        primaryTextColor: '#fff',
+        primaryBorderColor: '#0f172a',
+        lineColor: '#334155',
+        secondaryColor: '#f0f9ff',
+        tertiaryColor: '#f8fafc'
+      }
+    });
+  </script>
+</body>
+
+</html>

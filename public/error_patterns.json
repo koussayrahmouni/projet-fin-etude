@@ -1,0 +1,342 @@
+{
+  "generated_at": "2026-04-13T09:13:26",
+  "total_problem_qa": 2771,
+  "total_clusters": 349,
+  "category_totals": {
+    "Monitoring": 283,
+    "Dollar Universe": 28,
+    "JIRA": 11
+  },
+  "top_issues": [
+    {
+      "category": "Monitoring",
+      "title": "Nouvelle fonction launch_DSN.sh",
+      "count": 19,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: 'Nouvelle fonction du launch_DSN.sh :  ",
+        "What should a ProdOps engineer do according to the consigne 'Nouvelle fonction du launch_DSN.sh :  D",
+        "Summarize the operational steps for: 'Nouvelle fonction du launch_DSN.sh :  DOWNLOADBPIJM2M download"
+      ],
+      "sample_answer": "On nous a demandé de développer une nouvelle fonction pour le télécharger des BPIJ en mode M2M."
+    },
+    {
+      "category": "Monitoring",
+      "title": "Création mise jour",
+      "count": 17,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: '[HRA][JIRA] Création / mise à jour tic",
+        "What should a ProdOps engineer do according to the consigne '[HRA][JIRA] Création / mise à jour tick",
+        "Summarize the operational steps for: '[HRA][JIRA] Création / mise à jour ticket JIRA avec texte + pi"
+      ],
+      "sample_answer": "ATTENTION SEULEMENT A USAGE PRODOPS."
+    },
+    {
+      "category": "Dollar Universe",
+      "title": "script pour automatisme",
+      "count": 16,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: '[ résumé GET/MGET SFTP ] - script pour",
+        "What should a ProdOps engineer do according to the consigne '[ résumé GET/MGET SFTP ] - script pour ",
+        "Summarize the operational steps for: '[ résumé GET/MGET SFTP ] - script pour automatisme $U'."
+      ],
+      "sample_answer": "Bonjour,"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Permettre connexion entre",
+      "count": 15,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: 'Permettre une connexion entre UC10 et ",
+        "What should a ProdOps engineer do according to the consigne 'Permettre une connexion entre UC10 et L",
+        "Summarize the operational steps for: 'Permettre une connexion entre UC10 et Ldap sur HRA-Space via u"
+      ],
+      "sample_answer": "Pour afficher un menu sur la mire de connexion de HRA-Space qui permet de choisir une connexion de type UC10 ou Ldap, il faut procéder comme ci-dessous:"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Check",
+      "count": 14,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: '[QUERY] Check ZO'.",
+        "What should a ProdOps engineer do according to the consigne '[QUERY] Check ZO'?",
+        "Summarize the operational steps for: '[QUERY] Check ZO'."
+      ],
+      "sample_answer": "Exemple d'utilisation de l'outil CheckZO:"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Query Activer mode",
+      "count": 13,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: 'Query - Activer le mode DEBUG'.",
+        "What should a ProdOps engineer do according to the consigne 'Query - Activer le mode DEBUG'?",
+        "Summarize the operational steps for: 'Query - Activer le mode DEBUG'."
+      ],
+      "sample_answer": "Arrêter le serveur de Query"
+    },
+    {
+      "category": "Dollar Universe",
+      "title": "rappel sessions",
+      "count": 12,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: 'DSN : rappel sur les sessions $U DSN'.",
+        "What should a ProdOps engineer do according to the consigne 'DSN : rappel sur les sessions $U DSN'?",
+        "Summarize the operational steps for: 'DSN : rappel sur les sessions $U DSN'."
+      ],
+      "sample_answer": "Voici un rappel du contenu des sessions d’exploitation DSN $U :"
+    },
+    {
+      "category": "Monitoring",
+      "title": "problème performance/fuite mémoire",
+      "count": 12,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: 'problème performance/fuite mémoire tom",
+        "What should a ProdOps engineer do according to the consigne 'problème performance/fuite mémoire tomw",
+        "Summarize the operational steps for: 'problème performance/fuite mémoire tomweb ou DSN : mise en pla"
+      ],
+      "sample_answer": "Dans la cas ou le tomweb ou le DSN monte en CPU et mémoire,"
+    },
+    {
+      "category": "JIRA",
+      "title": "Quelques informations",
+      "count": 11,
+      "examples": [
+        "What should a ProdOps engineer do according to the consigne '[Consignes][semaines 28 - 29 - 30 - 31]",
+        "Summarize the operational steps for: '[Consignes][semaines 28 - 29 - 30 - 31] Quelques informations'",
+        "What should a ProdOps engineer do according to the consigne '[4YOU] Informations +'?"
+      ],
+      "sample_answer": "Ø"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Fiche cliente",
+      "count": 11,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: '[CONTITECH] Fiche cliente'.",
+        "What should a ProdOps engineer do according to the consigne '[CONTITECH] Fiche cliente'?",
+        "Summarize the operational steps for: '[CONTITECH] Fiche cliente'."
+      ],
+      "sample_answer": ">"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Déploiement .war hr-digital-files",
+      "count": 11,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: 'Déploiement du .war : hr-digital-files",
+        "What should a ProdOps engineer do according to the consigne 'Déploiement du .war : hr-digital-files'",
+        "Summarize the operational steps for: 'Déploiement du .war : hr-digital-files'."
+      ],
+      "sample_answer": "Voici quelques consignes pour la mise en place du .war hr-digital-files suite au déploiement fait pour CCI France."
+    },
+    {
+      "category": "Monitoring",
+      "title": "Demandes crées Chanel",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: '[NOVAPOST] Demandes crées par Chanel l",
+        "What should a ProdOps engineer do according to the consigne '[NOVAPOST] Demandes crées par Chanel li",
+        "Summarize the operational steps for: '[NOVAPOST] Demandes crées par Chanel liée à la dématérialisati"
+      ],
+      "sample_answer": "Si Chanel ouvre un JIRA (CHANEL-) traitant d'incident sur Novapost :"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Absent 21/12/2012 14/01/2013",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: '[CONSIGNES][AURELIEN] Absent du 21/12/",
+        "What should a ProdOps engineer do according to the consigne '[CONSIGNES][AURELIEN] Absent du 21/12/2",
+        "Summarize the operational steps for: '[CONSIGNES][AURELIEN] Absent du 21/12/2012 au 14/01/2013'."
+      ],
+      "sample_answer": "Je pars en congé ce soir et je serai absent jusqu'au lundi 14 janvier 2013 inclus."
+    },
+    {
+      "category": "Monitoring",
+      "title": "Mise place ssh/scp",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: 'Mise en place du ssh/scp automatique'.",
+        "What should a ProdOps engineer do according to the consigne 'Mise en place du ssh/scp automatique'?",
+        "Summarize the operational steps for: 'Mise en place du ssh/scp automatique'."
+      ],
+      "sample_answer": "Pour pouvoir mettre en place le ssh ou scp automatique d'un serveurA (userA) vers un serveurB(userB), voici la procédure à suivre:"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Reprise",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: 'Reprise de l'interface HY6X (envoi des",
+        "What should a ProdOps engineer do according to the consigne 'Reprise de l'interface HY6X (envoi des ",
+        "Summarize the operational steps for: 'Reprise de l'interface HY6X (envoi des fichiers COL00BBY, COL0"
+      ],
+      "sample_answer": "Cette interface est quotidienne dans $U à 1h du matin."
+    },
+    {
+      "category": "Monitoring",
+      "title": "Intégration fichier pointage",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: 'Intégration du fichier de pointage'.",
+        "What should a ProdOps engineer do according to the consigne 'Intégration du fichier de pointage'?",
+        "Summarize the operational steps for: 'Intégration du fichier de pointage'."
+      ],
+      "sample_answer": "Voici la procédure afin d'intégrer manuellement un fichier de pointage pour le client 3 Suisses:"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Transfert virement Confirmation",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: '[EXALOG] Transfert du virement et Conf",
+        "What should a ProdOps engineer do according to the consigne '[EXALOG] Transfert du virement et Confi",
+        "Summarize the operational steps for: '[EXALOG] Transfert du virement et Confirmation de transfert vi"
+      ],
+      "sample_answer": "Pour envoyer des bandes de virement à EXALOG"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Lancement hebdomadaire",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: 'Lancement STC hebdomadaire'.",
+        "What should a ProdOps engineer do according to the consigne 'Lancement STC hebdomadaire'?",
+        "Summarize the operational steps for: 'Lancement STC hebdomadaire'."
+      ],
+      "sample_answer": "Le vendredi a lieu la validation STC : il s’agit d’un lancement hebdomadaire"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Epuration annuelle dans",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: 'Epuration annuelle des IK dans les dos",
+        "What should a ProdOps engineer do according to the consigne 'Epuration annuelle des IK dans les doss",
+        "Summarize the operational steps for: 'Epuration annuelle des IK dans les dossiers'."
+      ],
+      "sample_answer": "L'épuration annuelle des IK a été mise en place dans la jira PEGASUS-1288."
+    },
+    {
+      "category": "Monitoring",
+      "title": "problème remontée pointage.",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: '[GRASSAVOYE][KABA] En cas de problème ",
+        "What should a ProdOps engineer do according to the consigne '[GRASSAVOYE][KABA] En cas de problème d",
+        "Summarize the operational steps for: '[GRASSAVOYE][KABA] En cas de problème de remontée de pointage."
+      ],
+      "sample_answer": "En cas de problème sur les remontées de badgeages pour Gras-Savoye"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Interfaces quotidiennes LDAP",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: 'Interfaces quotidiennes LDAP : cinémat",
+        "What should a ProdOps engineer do according to the consigne 'Interfaces quotidiennes LDAP : cinémati",
+        "Summarize the operational steps for: 'Interfaces quotidiennes LDAP : cinématique'."
+      ],
+      "sample_answer": "Pour Grassavoye, des interfaces quotidiennes sont programmées en crontab sur P1"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Quelques points...",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: '[Consignes][15/07=>02/08] Quelques poi",
+        "What should a ProdOps engineer do according to the consigne '[Consignes][15/07=>02/08] Quelques poin",
+        "Summarize the operational steps for: '[Consignes][15/07=>02/08] Quelques points...'."
+      ],
+      "sample_answer": "Bonjour Ipopsiens,"
+    },
+    {
+      "category": "Monitoring",
+      "title": "script livraison",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: '[Air Liquide] [livraison] : script de ",
+        "What should a ProdOps engineer do according to the consigne '[Air Liquide] [livraison] : script de l",
+        "Summarize the operational steps for: '[Air Liquide] [livraison] : script de livraison'."
+      ],
+      "sample_answer": "Bonjour,"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Comment savoir quel",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: 'Comment savoir sur quel serveur se tro",
+        "What should a ProdOps engineer do according to the consigne 'Comment savoir sur quel serveur se trou",
+        "Summarize the operational steps for: 'Comment savoir sur quel serveur se trouve la base primaire ora"
+      ],
+      "sample_answer": "Voici comment savoir sur quel serveur se trouve la base primaire oracle"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Problème INVALID APPLICATION",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: 'Problème INVALID APPLICATION MY10'.",
+        "What should a ProdOps engineer do according to the consigne 'Problème INVALID APPLICATION MY10'?",
+        "Summarize the operational steps for: 'Problème INVALID APPLICATION MY10'."
+      ],
+      "sample_answer": "Un problème qui se présente d'une manière réccurente sur les environnements Outsourcing , qui se manifeste lors de la connexion à hra-space (voir screenshot) et se traduit dans la log d'openhr par ce message d'erreur:"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Erreur accès fichier",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: 'Erreur accès fichier oracle'.",
+        "What should a ProdOps engineer do according to the consigne 'Erreur accès fichier oracle'?",
+        "Summarize the operational steps for: 'Erreur accès fichier oracle'."
+      ],
+      "sample_answer": "[A compléter avec les erreurs oracle que l'on obtient]"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Refresh",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: '[LVM] Refresh'.",
+        "What should a ProdOps engineer do according to the consigne '[LVM] Refresh'?",
+        "Summarize the operational steps for: '[LVM] Refresh'."
+      ],
+      "sample_answer": "La TMA demande le rafraichissement de la manière suivante:"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Exécution",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: 'Exécution de l'interface 32IW0043  (Fo",
+        "What should a ProdOps engineer do according to the consigne 'Exécution de l'interface 32IW0043  (For",
+        "Summarize the operational steps for: 'Exécution de l'interface 32IW0043  (FormerGaz Formation) avec "
+      ],
+      "sample_answer": "L’interface 32IW0043  (FormerGaz Formation) doit intégrer 2 fichiers que nous récupérons sur le serveur d’échange du client. Ces 2 fichiers sont initialement chiffrés."
+    },
+    {
+      "category": "Monitoring",
+      "title": "Intégration fichiers Natixis",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: 'Intégration des fichiers Natixis flux ",
+        "What should a ProdOps engineer do according to the consigne 'Intégration des fichiers Natixis flux 2",
+        "Summarize the operational steps for: 'Intégration des fichiers Natixis flux 2bis, flux 4, flux 5bis "
+      ],
+      "sample_answer": "Voici la procédure pour intégrer les fichiers Natixis (ex: PEGASUS-2619)"
+    },
+    {
+      "category": "Monitoring",
+      "title": "Gestion boîte",
+      "count": 9,
+      "examples": [
+        "Explain the procedure described in the Maia consigne titled: '[IPOPS] Gestion de la boîte'.",
+        "What should a ProdOps engineer do according to the consigne '[IPOPS] Gestion de la boîte'?",
+        "Summarize the operational steps for: '[IPOPS] Gestion de la boîte'."
+      ],
+      "sample_answer": "Voici quelques éléments à connaitre pour le traitement des tickets arrivant dans la boîte IPOPS:"
+    }
+  ]
+}

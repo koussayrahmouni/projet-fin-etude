@@ -23,10 +23,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, Download, FileSpreadsheet, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// ─── Types ─────────────────────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────────────────
 type SheetRow = (string | number | boolean | null)[];
 type SheetData = {
   sheetName: string;
@@ -34,7 +34,17 @@ type SheetData = {
   rows: SheetRow[];
 };
 
-// ─── Combobox Component ─────────────────────────────────────────────────────
+type AwxClient = {
+  id: number;
+  hostName: string;
+  clientName: string;
+};
+
+// ─── Same fetch helper as ChecklistPage ─────────────────────────────────────
+const apiFetch = (url: string, options: RequestInit = {}) =>
+  fetch(url, { credentials: "include", ...options });
+
+// ─── Combobox ────────────────────────────────────────────────────────────────
 function ClientCombobox({
   value,
   onChange,
@@ -43,10 +53,19 @@ function ClientCombobox({
 }: {
   value: string;
   onChange: (value: string) => void;
-  clients: string[];
+  clients: AwxClient[];
   loading: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [inputValue, setInputValue] = useState(value);
+
+  useEffect(() => {
+    setInputValue(value);
+  }, [value]);
+
+  const filtered = clients.filter((c) =>
+    c.clientName.toLowerCase().includes(inputValue.toLowerCase())
+  );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -55,45 +74,72 @@ function ClientCombobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between text-left font-normal"
+          className="w-full justify-between text-left font-normal h-10"
           disabled={loading}
         >
-          {value || "Select or type a client..."}
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <span className={cn("truncate", !value && "text-slate-400")}>
+            {value || (loading ? "Loading clients..." : "Select or type a client...")}
+          </span>
+          {loading ? (
+            <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin opacity-50" />
+          ) : (
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-full p-0">
-        <Command>
-          <CommandInput placeholder="Search client..." />
+      <PopoverContent
+        className="p-0"
+        style={{ width: "var(--radix-popover-trigger-width)" }}
+        align="start"
+      >
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder="Search or type client name..."
+            value={inputValue}
+            onValueChange={(v) => {
+              setInputValue(v);
+              onChange(v);
+            }}
+          />
           <CommandList>
-            <CommandEmpty>
-              {loading ? "Loading clients..." : "No clients found."}
-            </CommandEmpty>
-            <CommandGroup>
-              {clients.map((client) => (
-                <CommandItem
-                  key={client}
-                  value={client.toLowerCase()}
-                  onSelect={(currentValue) => {
-                    const selected = clients.find(
-                      (c) => c.toLowerCase() === currentValue
-                    ) || currentValue;
-                    onChange(selected);
-                    setOpen(false);
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      "mr-2 h-4 w-4",
-                      value.toLowerCase() === client.toLowerCase()
-                        ? "opacity-100"
-                        : "opacity-0"
-                    )}
-                  />
-                  {client}
-                </CommandItem>
-              ))}
-            </CommandGroup>
+            {filtered.length === 0 && inputValue.length > 0 ? (
+              <CommandEmpty
+                className="py-3 px-4 text-sm text-slate-500 cursor-pointer hover:bg-slate-50"
+                onClick={() => {
+                  onChange(inputValue);
+                  setOpen(false);
+                }}
+              >
+                Use &ldquo;{inputValue}&rdquo;
+              </CommandEmpty>
+            ) : filtered.length === 0 ? (
+              <CommandEmpty>No clients found.</CommandEmpty>
+            ) : (
+              <CommandGroup>
+                {filtered.map((client) => (
+                  <CommandItem
+                    key={client.id}
+                    value={client.clientName}
+                    onSelect={() => {
+                      onChange(client.clientName);
+                      setInputValue(client.clientName);
+                      setOpen(false);
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4 flex-shrink-0",
+                        value === client.clientName ? "opacity-100" : "opacity-0"
+                      )}
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">{client.clientName}</span>
+                      <span className="text-xs text-slate-400">{client.hostName}</span>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
           </CommandList>
         </Command>
       </PopoverContent>
@@ -101,68 +147,43 @@ function ClientCombobox({
   );
 }
 
-// ─── Main Component ─────────────────────────────────────────────────────────
+// ─── Main Component ──────────────────────────────────────────────────────────
 export default function ChecklistExcelPage() {
   const [clientNameInput, setClientNameInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [clientsLoading, setClientsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Loaded data
   const [checklistId, setChecklistId] = useState<string | null>(null);
   const [clientName, setClientName] = useState("");
   const [sheets, setSheets] = useState<SheetData[]>([]);
   const [selectedSheet, setSelectedSheet] = useState(0);
 
-  // Available clients from database
-  const [clients, setClients] = useState<string[]>([]);
+  // Same AWX client type as ChecklistPage
+  const [awxClients, setAwxClients] = useState<AwxClient[]>([]);
 
-  // Editing state
   const [editingCell, setEditingCell] = useState<{ row: number; col: number } | null>(null);
   const [tempValue, setTempValue] = useState("");
   const saveTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch available client names from database
+  // ─── Fetch clients from /api/checklist/clients (same as ChecklistPage) ──
   useEffect(() => {
-    async function fetchClients() {
-      setClientsLoading(true);
-      try {
-        // CHANGE THIS ENDPOINT to match your actual API that returns client names
-        // Examples: /api/checklist/clients, /api/checklist?list=clients, etc.
-        const res = await fetch("/api/checklist/excel?list=true");
-
-        if (!res.ok) {
-          throw new Error("Failed to load client list");
-        }
-
-        const data = await res.json();
-
-        // Adapt according to your actual response shape
-        let clientList: string[] = [];
-        if (Array.isArray(data)) {
-          clientList = data;
-        } else if (data.clients) {
-          clientList = data.clients;
-        } else if (data.checklists) {
-          clientList = data.checklists;
-        } else if (data.names) {
-          clientList = data.names;
-        }
-
-        setClients(clientList.filter(Boolean));
-      } catch (err) {
-        console.error("Failed to load client list:", err);
-        // User can still type manually even if list fails
-      } finally {
-        setClientsLoading(false);
-      }
-    }
-
-    fetchClients();
+    setClientsLoading(true);
+    apiFetch("/api/checklist/clients")
+      .then((res) => res.json())
+      .then((clients: AwxClient[]) => {
+        setAwxClients(clients);
+      })
+      .catch((err) => {
+        console.error("Failed to load AWX clients:", err);
+        setAwxClients([]);
+      })
+      .finally(() => setClientsLoading(false));
   }, []);
 
-  // ─── Load Excel from DB ─────────────────────────────────────────────────
+  // ─── Load Excel ────────────────────────────────────────────────────────
   async function loadExcel() {
     if (!clientNameInput.trim()) return;
     setLoading(true);
@@ -171,7 +192,9 @@ export default function ChecklistExcelPage() {
     setChecklistId(null);
 
     try {
-      const res = await fetch(`/api/checklist/excel?clientName=${encodeURIComponent(clientNameInput.trim())}`);
+      const res = await apiFetch(
+        `/api/checklist/excel?clientName=${encodeURIComponent(clientNameInput.trim())}`
+      );
       if (res.status === 404) {
         setError("No checklist with Excel data found for this client.");
         return;
@@ -182,12 +205,9 @@ export default function ChecklistExcelPage() {
       setChecklistId(data.id);
       setClientName(data.clientName);
 
-      // Decode base64 → parse with SheetJS
       const binary = atob(data.excelData);
       const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-      }
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
       const workbook = XLSX.read(bytes, { type: "array" });
 
       const parsed: SheetData[] = workbook.SheetNames.map((name) => {
@@ -197,66 +217,58 @@ export default function ChecklistExcelPage() {
           defval: "",
           blankrows: true,
         });
-        const headers = rows.length > 0 ? rows[0].map((h: any, i: number) => String(h || `Col ${i + 1}`)) : [];
-        return {
-          sheetName: name,
-          headers,
-          rows: rows.slice(1),
-        };
+        const headers =
+          rows.length > 0
+            ? rows[0].map((h: any, i: number) => String(h || `Col ${i + 1}`))
+            : [];
+        return { sheetName: name, headers, rows: rows.slice(1) };
       });
 
       setSheets(parsed);
       setSelectedSheet(0);
-    } catch (err) {
-      console.error("Load failed:", err);
+    } catch {
       setError("Failed to load Excel data. Please try again.");
     } finally {
       setLoading(false);
     }
   }
 
-  // ─── Save Excel back to DB ──────────────────────────────────────────────
-  const saveToDb = useCallback(async (updatedSheets: SheetData[]) => {
-    if (!checklistId) return;
-    setSaving(true);
-
-    try {
-      const wb = XLSX.utils.book_new();
-      for (const sheet of updatedSheets) {
-        const allRows = [sheet.headers, ...sheet.rows];
-        const ws = XLSX.utils.aoa_to_sheet(allRows);
-        XLSX.utils.book_append_sheet(wb, ws, sheet.sheetName);
+  // ─── Save to DB ────────────────────────────────────────────────────────
+  const saveToDb = useCallback(
+    async (updatedSheets: SheetData[]) => {
+      if (!checklistId) return;
+      setSaving(true);
+      try {
+        const wb = XLSX.utils.book_new();
+        for (const sheet of updatedSheets) {
+          const ws = XLSX.utils.aoa_to_sheet([sheet.headers, ...sheet.rows]);
+          XLSX.utils.book_append_sheet(wb, ws, sheet.sheetName);
+        }
+        const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+        let binary = "";
+        new Uint8Array(wbOut).forEach((b) => (binary += String.fromCharCode(b)));
+        await apiFetch("/api/checklist/excel", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: checklistId, excelData: btoa(binary) }),
+        });
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 2000);
+      } catch {
+        // silent
+      } finally {
+        setSaving(false);
       }
-      const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    },
+    [checklistId]
+  );
 
-      const bytes = new Uint8Array(wbOut);
-      let binary = "";
-      for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      const base64 = btoa(binary);
-
-      await fetch("/api/checklist/excel", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: checklistId, excelData: base64 }),
-      });
-    } catch (err) {
-      console.error("Save failed:", err);
-    } finally {
-      setSaving(false);
-    }
-  }, [checklistId]);
-
-  // ─── Autosave with debounce ─────────────────────────────────────────────
   function autosave(updatedSheets: SheetData[]) {
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
-    saveTimeout.current = setTimeout(() => {
-      saveToDb(updatedSheets);
-    }, 1000);
+    saveTimeout.current = setTimeout(() => saveToDb(updatedSheets), 1000);
   }
 
-  // ─── Cell editing ───────────────────────────────────────────────────────
+  // ─── Cell editing ──────────────────────────────────────────────────────
   function startEdit(row: number, col: number) {
     const value = sheets[selectedSheet]?.rows[row]?.[col];
     setEditingCell({ row, col });
@@ -286,166 +298,208 @@ export default function ChecklistExcelPage() {
     setEditingCell(null);
   }
 
-  // ─── Export as .xlsx download ───────────────────────────────────────────
+  // ─── Download ──────────────────────────────────────────────────────────
   function handleDownload() {
-    if (sheets.length === 0) return;
+    if (!sheets.length) return;
     const wb = XLSX.utils.book_new();
     for (const sheet of sheets) {
-      const allRows = [sheet.headers, ...sheet.rows];
-      const ws = XLSX.utils.aoa_to_sheet(allRows);
+      const ws = XLSX.utils.aoa_to_sheet([sheet.headers, ...sheet.rows]);
       XLSX.utils.book_append_sheet(wb, ws, sheet.sheetName);
     }
     const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     saveAs(new Blob([wbOut]), `B2R-Checklist-${clientName || "export"}.xlsx`);
   }
 
-  // ─── Detect section/header rows for styling ────────────────────────────
-  function isSectionRow(row: SheetRow): boolean {
-    const firstCell = String(row[0] || "").trim();
-    return /^\d+$/.test(firstCell) && row.filter((c) => String(c || "").trim() !== "").length <= 4;
+  // ─── Row styling ───────────────────────────────────────────────────────
+  function isSectionRow(row: SheetRow) {
+    const first = String(row[0] || "").trim();
+    return /^\d+$/.test(first) && row.filter((c) => String(c || "").trim()).length <= 4;
   }
 
-  function isHeaderRow(row: SheetRow): boolean {
+  function isHeaderRow(row: SheetRow) {
     const text = row.map((c) => String(c || "").trim().toUpperCase()).join(" ");
     return text.includes("CHECKLIST") || text.includes("OWNER") || text.includes("STATUS");
   }
 
+  function getCellStatusClass(value: string) {
+    const u = value.toUpperCase().trim();
+    if (u === "✔" || u === "DONE") return "text-green-700 bg-green-50 font-medium";
+    if (u === "✘" || u === "NOT DONE" || u === "NOT STARTED") return "text-red-600 bg-red-50 font-medium";
+    if (u.includes("IN PROGRESS") || u.includes("PROGRESS")) return "text-amber-700 bg-amber-50 font-medium";
+    if (u === "N/A") return "text-slate-400 italic";
+    return "";
+  }
+
   const currentSheet = sheets[selectedSheet];
 
-  // ─── Render ──────────────────────────────────────────────────────────────
+  // ─── Render ────────────────────────────────────────────────────────────
   return (
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b bg-background px-4">
+        {/* Top bar */}
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-white px-4 sticky top-0 z-10">
           <SidebarTrigger className="-ml-1" />
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold tracking-tight">Checklist Excel Editor</h1>
+          <div className="h-5 w-px bg-slate-200" />
+          <FileSpreadsheet className="h-5 w-5 text-blue-600" />
+          <h1 className="text-base font-semibold tracking-tight text-slate-900">
+            Checklist Excel Editor
+          </h1>
+          <div className="ml-auto flex items-center gap-2">
+            {saving && (
+              <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                <Loader2 className="h-3 w-3 animate-spin" /> Saving...
+              </span>
+            )}
+            {saveSuccess && !saving && (
+              <span className="flex items-center gap-1.5 text-xs text-green-600">
+                <Check className="h-3 w-3" /> Saved
+              </span>
+            )}
           </div>
-          {saving && <span className="ml-auto text-xs text-slate-400 animate-pulse">Saving...</span>}
         </header>
 
-        <div className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 bg-slate-50/40 min-h-screen">
-          <div className="max-w-[1600px] mx-auto w-full space-y-6">
-            {/* Search bar → now Combobox */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-              <h2 className="text-lg font-semibold text-slate-900 mb-4">Load Checklist Excel</h2>
+        <div className="flex flex-col gap-5 p-5 bg-slate-50 min-h-[calc(100vh-56px)]">
+          <div className="max-w-[1600px] mx-auto w-full space-y-5">
+
+            {/* Search card */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+                Load Checklist
+              </p>
               <div className="flex gap-3 items-end">
-                <div className="flex-1">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">
+                <div className="flex-1 max-w-sm">
+                  <label className="text-xs text-slate-500 font-medium mb-1.5 block">
                     Client Name
                   </label>
                   <ClientCombobox
                     value={clientNameInput}
                     onChange={setClientNameInput}
-                    clients={clients}
+                    clients={awxClients}
                     loading={clientsLoading}
                   />
                 </div>
                 <Button
                   onClick={loadExcel}
-                  disabled={loading || !clientNameInput.trim() || clientsLoading}
-                  className={cn(
-                    "px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                    loading && "opacity-70 cursor-wait"
-                  )}
+                  disabled={loading || !clientNameInput.trim()}
+                  className="h-10 px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
                 >
-                  {loading ? "Loading..." : "Load"}
+                  {loading ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...</>
+                  ) : (
+                    "Load"
+                  )}
                 </Button>
               </div>
+
+              {/* Client not found in AWX */}
+              {!clientsLoading && awxClients.length === 0 && (
+                <p className="mt-3 text-xs text-amber-600 flex items-center gap-1.5">
+                  ⚠️ No clients loaded from AWX — you can still type a client name manually.
+                </p>
+              )}
+
               {error && (
-                <p className="mt-3 text-sm text-red-600">{error}</p>
+                <p className="mt-3 text-sm text-red-600 flex items-center gap-1.5">
+                  <span>⚠️</span> {error}
+                </p>
               )}
             </div>
 
             {/* Loaded content */}
             {currentSheet && (
               <>
-                {/* Info bar */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm font-medium text-slate-700">
-                      Client: <span className="font-bold text-slate-900">{clientName}</span>
-                    </span>
+                {/* Info / controls bar */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Client</span>
+                      <span className="text-sm font-semibold bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full">
+                        {clientName}
+                      </span>
+                    </div>
                     {sheets.length > 1 && (
-                      <select
-                        value={selectedSheet}
-                        onChange={(e) => {
-                          setSelectedSheet(Number(e.target.value));
-                          setEditingCell(null);
-                        }}
-                        className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm"
-                      >
-                        {sheets.map((s, i) => (
-                          <option key={i} value={i}>{s.sheetName}</option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Sheet</span>
+                        <div className="flex gap-1">
+                          {sheets.map((s, i) => (
+                            <button
+                              key={i}
+                              onClick={() => { setSelectedSheet(i); setEditingCell(null); }}
+                              className={cn(
+                                "px-3 py-1 rounded-full text-xs font-medium transition-colors",
+                                selectedSheet === i
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                              )}
+                            >
+                              {s.sheetName}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     )}
                   </div>
                   <button
                     onClick={handleDownload}
-                    className="px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
                   >
+                    <Download className="h-4 w-4" />
                     Download .xlsx
                   </button>
                 </div>
 
-                {/* Excel table */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                {/* Table */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead className="bg-amber-50 border-b-2 border-orange-300">
-                        <tr>
-                          <th className="px-2 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-10 text-center border-r border-slate-200">#</th>
+                    <table className="w-full text-left border-collapse text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b-2 border-slate-200">
+                          <th className="px-3 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-10 text-center border-r border-slate-200 sticky left-0 bg-slate-50">
+                            #
+                          </th>
                           {currentSheet.headers.map((h, i) => (
                             <th
                               key={i}
-                              className="px-3 py-2 text-[10px] font-bold text-slate-700 uppercase tracking-wider border-r border-slate-200 min-w-[100px]"
+                              className="px-3 py-2.5 text-[10px] font-bold text-slate-600 uppercase tracking-wider border-r border-slate-200 min-w-[120px] whitespace-nowrap"
                             >
                               {h}
                             </th>
                           ))}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody>
                         {currentSheet.rows.map((row, ri) => {
                           const isSection = isSectionRow(row);
                           const isHeader = isHeaderRow(row);
                           return (
                             <tr
                               key={ri}
-                              className={
-                                isSection
-                                  ? "bg-orange-100 font-bold"
-                                  : isHeader
-                                  ? "bg-amber-50 font-semibold"
-                                  : "hover:bg-blue-50/30"
-                              }
+                              className={cn(
+                                "border-b border-slate-100 transition-colors",
+                                isSection ? "bg-orange-50 border-b border-orange-200" :
+                                  isHeader ? "bg-amber-50" :
+                                    "hover:bg-blue-50/40"
+                              )}
                             >
-                              <td className="px-2 py-1.5 text-[10px] text-slate-400 text-center border-r border-slate-100 font-mono">
+                              <td className="px-3 py-2 text-[10px] text-slate-300 text-center border-r border-slate-100 font-mono sticky left-0 bg-inherit">
                                 {ri + 1}
                               </td>
                               {currentSheet.headers.map((_, ci) => {
                                 const cellValue = row[ci] != null ? String(row[ci]) : "";
                                 const isEditing = editingCell?.row === ri && editingCell?.col === ci;
-
-                                let statusClass = "";
-                                const upper = cellValue.toUpperCase().trim();
-                                if (upper === "\u2714" || upper === "DONE") {
-                                  statusClass = "text-green-700 bg-green-50";
-                                } else if (upper === "\u2718" || upper === "NOT DONE" || upper === "NOT STARTED") {
-                                  statusClass = "text-red-700 bg-red-50";
-                                } else if (upper.includes("IN PROGRESS") || upper.includes("PROGRESS")) {
-                                  statusClass = "text-amber-700 bg-amber-50";
-                                } else if (upper === "N/A") {
-                                  statusClass = "text-slate-400 bg-slate-50 italic";
-                                }
+                                const statusClass = getCellStatusClass(cellValue);
 
                                 return (
                                   <td
                                     key={ci}
-                                    className={`px-3 py-1.5 text-sm border-r border-slate-100 ${statusClass}`}
+                                    className={cn(
+                                      "px-3 py-2 border-r border-slate-100 whitespace-nowrap max-w-[300px] truncate",
+                                      isSection && "font-bold text-slate-700",
+                                      statusClass
+                                    )}
                                     onDoubleClick={() => startEdit(ri, ci)}
+                                    title={cellValue}
                                   >
                                     {isEditing ? (
                                       <input
@@ -458,7 +512,7 @@ export default function ChecklistExcelPage() {
                                           if (e.key === "Enter") commitEdit();
                                           if (e.key === "Escape") cancelEdit();
                                         }}
-                                        className="w-full px-1 py-0.5 border border-blue-400 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                                        className="w-full min-w-[120px] px-2 py-0.5 border border-blue-400 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
                                       />
                                     ) : (
                                       <span className="cursor-default">{cellValue}</span>
@@ -472,26 +526,34 @@ export default function ChecklistExcelPage() {
                       </tbody>
                     </table>
                   </div>
+                  <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100">
+                    <p className="text-xs text-slate-400">
+                      {currentSheet.rows.length} rows · Double-click any cell to edit · Changes are autosaved
+                    </p>
+                  </div>
                 </div>
-
-                <p className="text-xs text-slate-400 text-center">
-                  Double-click any cell to edit. Changes are autosaved.
-                </p>
               </>
             )}
 
             {/* Empty state */}
             {!loading && sheets.length === 0 && !error && (
-              <div className="bg-white border-2 border-dashed border-slate-300 rounded-2xl p-20 text-center">
-                <div className="max-w-xs mx-auto">
-                  <div className="text-6xl mb-6">&#128196;</div>
-                  <p className="text-xl font-semibold text-slate-800">No Excel loaded</p>
-                  <p className="text-slate-500 mt-2">
-                    Select or type a client name above and click Load
-                  </p>
-                </div>
+              <div className="bg-white border-2 border-dashed border-slate-200 rounded-xl p-20 text-center">
+                <div className="text-5xl mb-4">📊</div>
+                <p className="text-lg font-semibold text-slate-700">No checklist loaded</p>
+                <p className="text-sm text-slate-400 mt-1">
+                  Select a client above and click <strong>Load</strong>
+                </p>
               </div>
             )}
+
+            {/* Loading state */}
+            {loading && (
+              <div className="bg-white border border-slate-200 rounded-xl p-20 text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-3" />
+                <p className="text-sm text-slate-500">Loading checklist...</p>
+              </div>
+            )}
+
           </div>
         </div>
       </SidebarInset>

@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import * as yaml from "js-yaml";
 
 const AWX_URL = process.env.AWX_URL || "http://10.7.157.105:30080";
-const AWX_TOKEN = process.env.AWX_TOKEN || "xf9KU5Oop2G7waMfIPgoCRq4qRPgL9";
+const AWX_TOKEN = process.env.AWX_TOKEN || "qIDo1vGom9tZu4MYI46trWnzCg8KRJ";
 const INVENTORY_ID = 3;
 
 async function awxFetch(path: string) {

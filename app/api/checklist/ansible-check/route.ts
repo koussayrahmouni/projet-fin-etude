@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 
 const AWX_URL = process.env.AWX_URL || "http://10.7.157.105:30080";
-const AWX_TOKEN = process.env.AWX_TOKEN || "xf9KU5Oop2G7waMfIPgoCRq4qRPgL9"; // your token here
+const AWX_TOKEN = process.env.AWX_TOKEN || "qIDo1vGom9tZu4MYI46trWnzCg8KRJ"; // your token here
 
 // Map section numbers to AWX job template names
 const SECTION_TEMPLATES: Record<number, string> = {

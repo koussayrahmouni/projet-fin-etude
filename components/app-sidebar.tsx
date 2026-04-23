@@ -39,6 +39,11 @@ const navMain = [
       { title: "Excel Editor", url: "/checklist/excel" },
     ],
   },
+    {
+    title: "Zabbix",
+    url: "/zabbix",
+    icon: IconListDetails,
+  },
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
